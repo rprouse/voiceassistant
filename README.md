@@ -50,7 +50,7 @@ The console app is for quick iteration on capture and transcription before the U
 
 | Command | What it does | Stage |
 |---|---|---|
-| `record --seconds 30` | Writes `them.wav` and `me.wav` in the device's native format | 1 |
+| `record --seconds 30 [-o dir]` | Writes `them.wav` and `me.wav` in the device's native format | 1 |
 | `record --converted` | Also writes 16 kHz mono `them-16k.wav` / `me-16k.wav` | 2 |
 | `transcribe file.wav` | Prints timestamped segments for a WAV file | 3 |
 | `live --naive` | Live captions from fixed 5 s chunks (baseline) | 3 |
@@ -75,7 +75,8 @@ Settings live in `appsettings.json`:
   "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": false },
   "Vad":      { "FrameMs": 30, "MinSpeechMs": 200, "PreRollMs": 300, "EndSilenceMs": 600,
                 "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000 },
-  "Capture":  { "EnableMic": true, "EnableLoopback": true },
+  "Capture":  { "EnableMic": true, "EnableLoopback": true, "DeviceRole": "Communications",
+                "QueueCapacity": 500, "GapToleranceMs": 50 },
   "Hallucinations": { "Blocklist": [ "Thank you.", "Thanks for watching!", "Thank you for watching." ] }
 }
 ```
@@ -86,6 +87,7 @@ Tuning tips:
 - **Sentences split too early:** raise `EndSilenceMs`.
 - **First words clipped:** raise `PreRollMs`.
 - **Phantom "Thank you." lines:** add the phrase to `Hallucinations.Blocklist`.
+- **Wrong device captured:** captures default to the Windows *communications* device, which meeting apps use. To capture the general default device (e.g. for a video outside a call), set `Capture.DeviceRole` to `Console`.
 
 ## How it works
 
