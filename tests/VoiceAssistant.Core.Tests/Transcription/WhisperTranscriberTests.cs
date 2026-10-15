@@ -1,6 +1,4 @@
 using Microsoft.Extensions.Logging.Abstractions;
-using NAudio.Wave;
-using VoiceAssistant.Core.Conversion;
 using VoiceAssistant.Core.Transcription;
 
 namespace VoiceAssistant.Core.Tests.Transcription
@@ -27,7 +25,7 @@ namespace VoiceAssistant.Core.Tests.Transcription
         [Test]
         public async Task TranscribesASpokenSentence()
         {
-            var segments = await TranscribeAsync(LoadSample("quick-brown-fox.wav"), TimeSpan.Zero);
+            var segments = await TranscribeAsync(TestAudio.LoadSample("quick-brown-fox.wav"), TimeSpan.Zero);
 
             string.Join(" ", segments.Select(s => s.Text)).ShouldContain("quick brown fox", Case.Insensitive);
         }
@@ -37,7 +35,7 @@ namespace VoiceAssistant.Core.Tests.Transcription
         {
             var start = TimeSpan.FromMinutes(3);
 
-            var segments = await TranscribeAsync(LoadSample("quick-brown-fox.wav"), start);
+            var segments = await TranscribeAsync(TestAudio.LoadSample("quick-brown-fox.wav"), start);
 
             segments.ShouldNotBeEmpty();
             segments.ShouldAllBe(s => s.Start >= start && s.End > s.Start && s.Source == AudioSource.Them);
@@ -47,20 +45,12 @@ namespace VoiceAssistant.Core.Tests.Transcription
         public async Task PromptedCallsWork()
         {
             var segments = await _transcriber.TranscribeAsync(
-                AudioSource.Me, TimeSpan.Zero, LoadSample("quick-brown-fox.wav"), "Animals and pangrams.", CancellationToken.None).ToListAsync();
+                AudioSource.Me, TimeSpan.Zero, TestAudio.LoadSample("quick-brown-fox.wav"), "Animals and pangrams.", CancellationToken.None).ToListAsync();
 
             string.Join(" ", segments.Select(s => s.Text)).ShouldContain("lazy dog", Case.Insensitive);
         }
 
         private Task<List<TranscriptSegment>> TranscribeAsync(float[] samples, TimeSpan start) =>
             _transcriber.TranscribeAsync(AudioSource.Them, start, samples, prompt: null, CancellationToken.None).ToListAsync().AsTask();
-
-        private static float[] LoadSample(string name)
-        {
-            using var reader = new WaveFileReader(Path.Combine(TestPaths.RepositoryRoot, "samples", name));
-            var bytes = new byte[reader.Length];
-            reader.ReadExactly(bytes);
-            return new AudioConverter(reader.WaveFormat).Convert(bytes);
-        }
     }
 }

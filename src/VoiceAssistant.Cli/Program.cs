@@ -8,6 +8,7 @@ using VoiceAssistant.Cli.Commands;
 using VoiceAssistant.Cli.Infrastructure;
 using VoiceAssistant.Core.Capture;
 using VoiceAssistant.Core.Transcription;
+using VoiceAssistant.Core.Vad;
 
 var logPath = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -29,6 +30,8 @@ builder.Logging.ClearProviders();
 builder.Services.AddSerilog(serilog);
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
 builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
+builder.Services.Configure<VadOptions>(builder.Configuration.GetSection(VadOptions.SectionName));
+builder.Services.Configure<HallucinationOptions>(builder.Configuration.GetSection(HallucinationOptions.SectionName));
 
 var app = new CommandApp(new TypeRegistrar(builder.Services));
 app.Configure(config =>
@@ -49,6 +52,7 @@ app.Configure(config =>
         .WithExample("transcribe", "them.wav");
     config.AddCommand<LiveCommand>("live")
         .WithDescription("Caption live system audio and microphone.")
+        .WithExample("live")
         .WithExample("live", "--naive");
 });
 

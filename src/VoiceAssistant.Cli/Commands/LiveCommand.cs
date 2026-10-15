@@ -8,8 +8,10 @@ using Spectre.Console.Cli;
 using VoiceAssistant.Core;
 using VoiceAssistant.Core.Capture;
 using VoiceAssistant.Core.Conversion;
+using VoiceAssistant.Core.Pipeline;
 using VoiceAssistant.Core.Segmentation;
 using VoiceAssistant.Core.Transcription;
+using VoiceAssistant.Core.Vad;
 
 namespace VoiceAssistant.Cli.Commands
 {
@@ -17,19 +19,28 @@ namespace VoiceAssistant.Cli.Commands
     {
         private readonly CaptureOptions _captureOptions;
         private readonly WhisperOptions _whisperOptions;
+        private readonly VadOptions _vadOptions;
+        private readonly HallucinationOptions _hallucinationOptions;
         private readonly ILoggerFactory _loggerFactory;
 
-        public LiveCommand(IOptions<CaptureOptions> captureOptions, IOptions<WhisperOptions> whisperOptions, ILoggerFactory loggerFactory)
+        public LiveCommand(
+            IOptions<CaptureOptions> captureOptions,
+            IOptions<WhisperOptions> whisperOptions,
+            IOptions<VadOptions> vadOptions,
+            IOptions<HallucinationOptions> hallucinationOptions,
+            ILoggerFactory loggerFactory)
         {
             _captureOptions = captureOptions.Value;
             _whisperOptions = whisperOptions.Value;
+            _vadOptions = vadOptions.Value;
+            _hallucinationOptions = hallucinationOptions.Value;
             _loggerFactory = loggerFactory;
         }
 
         internal sealed class Settings : CommandSettings
         {
             [CommandOption("--naive")]
-            [Description("Transcribe fixed, non-overlapping chunks (the stage 3 baseline).")]
+            [Description("Transcribe fixed, non-overlapping chunks instead of utterances (the stage 3 baseline).")]
             public bool Naive { get; set; }
 
             [CommandOption("--chunk-seconds <SECONDS>")]
@@ -43,8 +54,6 @@ namespace VoiceAssistant.Cli.Commands
 
             public override ValidationResult Validate()
             {
-                if (!Naive)
-                    return ValidationResult.Error("Utterance-based captions arrive in stage 4. Use --naive for now.");
                 if (ChunkSeconds <= 0)
                     return ValidationResult.Error("--chunk-seconds must be greater than zero.");
                 return Seconds is null or > 0 ? ValidationResult.Success() : ValidationResult.Error("--seconds must be greater than zero.");
@@ -70,42 +79,15 @@ namespace VoiceAssistant.Cli.Commands
             if (_captureOptions.EnableMic)
                 captures.Add(new MicCapture(clock, _captureOptions, _loggerFactory.CreateLogger<MicCapture>()));
 
-            // Both sources share one transcriber through one queue. Wait, never drop:
-            // if transcription falls behind, back-pressure reaches the capture queues,
-            // which drop (and count) the oldest audio instead.
-            var windows = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(4) { FullMode = BoundedChannelFullMode.Wait });
-
             try
             {
-                foreach (var capture in captures)
-                {
-                    capture.Start();
-                    AnsiConsole.MarkupLineInterpolated($"[grey]{capture.Source}: {capture.DeviceName}[/]");
-                }
+                var mode = settings.Naive ? $"{settings.ChunkSeconds} s chunks" : "utterances";
+                AnsiConsole.MarkupLineInterpolated($"[grey]{transcriber.ModelName} on {transcriber.Runtime}, {mode}. Ctrl+C to stop.[/]");
 
-                AnsiConsole.MarkupLineInterpolated(
-                    $"[grey]{transcriber.ModelName} on {transcriber.Runtime}, {settings.ChunkSeconds} s chunks. Ctrl+C to stop.[/]");
-                AnsiConsole.WriteLine();
-
-                var chunkLength = TimeSpan.FromSeconds(settings.ChunkSeconds);
-                var pumps = captures.Select(capture => PumpAsync(capture, chunkLength, windows.Writer)).ToList();
-                var transcribing = TranscribeAsync(transcriber, windows.Reader);
-
-                try
-                {
-                    await Task.Delay(settings.Seconds is { } seconds ? TimeSpan.FromSeconds(seconds) : Timeout.InfiniteTimeSpan, cancellationToken);
-                }
-                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
-                {
-                    // Ctrl+C: stop capturing, then finish transcribing what was captured.
-                }
-
-                AnsiConsole.MarkupLine("[grey]Stopping...[/]");
-                foreach (var capture in captures)
-                    await capture.StopAsync();
-                await Task.WhenAll(pumps);
-                windows.Writer.Complete();
-                await transcribing;
+                if (settings.Naive)
+                    await RunNaiveAsync(captures, transcriber, settings, cancellationToken);
+                else
+                    await RunCaptionsAsync(captures, transcriber, settings, cancellationToken);
 
                 foreach (var capture in captures)
                 {
@@ -122,7 +104,74 @@ namespace VoiceAssistant.Cli.Commands
             }
         }
 
-        private static async Task PumpAsync(IAudioSourceCapture capture, TimeSpan chunkLength, ChannelWriter<AudioChunk> windows)
+        private async Task RunCaptionsAsync(List<IAudioSourceCapture> captures, ITranscriber transcriber, Settings settings, CancellationToken cancellationToken)
+        {
+            var session = new CaptionSession(
+                captures,
+                transcriber,
+                _vadOptions,
+                _hallucinationOptions,
+                _whisperOptions.PromptCharacters,
+                [new ConsoleTranscriptSink()],
+                _loggerFactory);
+
+            session.Start();
+            ShowDevices(captures);
+
+            await WaitAsync(settings, cancellationToken);
+
+            AnsiConsole.MarkupLine("[grey]Stopping...[/]");
+            await session.StopAsync();
+
+            AnsiConsole.MarkupLineInterpolated(
+                $"[grey]Provisional passes skipped while busy: {session.Coordinator.SkippedProvisionalCount}. Hallucinations dropped: {session.Coordinator.HallucinationCount}.[/]");
+        }
+
+        private static async Task RunNaiveAsync(List<IAudioSourceCapture> captures, ITranscriber transcriber, Settings settings, CancellationToken cancellationToken)
+        {
+            // Both sources share one transcriber through one queue. Wait, never drop:
+            // if transcription falls behind, back-pressure reaches the capture queues,
+            // which drop (and count) the oldest audio instead.
+            var windows = Channel.CreateBounded<AudioChunk>(new BoundedChannelOptions(4) { FullMode = BoundedChannelFullMode.Wait });
+
+            foreach (var capture in captures)
+                capture.Start();
+            ShowDevices(captures);
+
+            var chunkLength = TimeSpan.FromSeconds(settings.ChunkSeconds);
+            var pumps = captures.Select(capture => PumpNaiveAsync(capture, chunkLength, windows.Writer)).ToList();
+            var transcribing = TranscribeNaiveAsync(transcriber, windows.Reader);
+
+            await WaitAsync(settings, cancellationToken);
+
+            AnsiConsole.MarkupLine("[grey]Stopping...[/]");
+            foreach (var capture in captures)
+                await capture.StopAsync();
+            await Task.WhenAll(pumps);
+            windows.Writer.Complete();
+            await transcribing;
+        }
+
+        private static void ShowDevices(IEnumerable<IAudioSourceCapture> captures)
+        {
+            foreach (var capture in captures)
+                AnsiConsole.MarkupLineInterpolated($"[grey]{capture.Source}: {capture.DeviceName}[/]");
+            AnsiConsole.WriteLine();
+        }
+
+        private static async Task WaitAsync(Settings settings, CancellationToken cancellationToken)
+        {
+            try
+            {
+                await Task.Delay(settings.Seconds is { } seconds ? TimeSpan.FromSeconds(seconds) : Timeout.InfiniteTimeSpan, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                // Ctrl+C: stop capturing, then finish transcribing what was captured.
+            }
+        }
+
+        private static async Task PumpNaiveAsync(IAudioSourceCapture capture, TimeSpan chunkLength, ChannelWriter<AudioChunk> windows)
         {
             var converter = new AudioConverter(capture.WaveFormat);
             var chunker = new FixedChunker(chunkLength);
@@ -137,7 +186,7 @@ namespace VoiceAssistant.Cli.Commands
                 await windows.WriteAsync(last);
         }
 
-        private static async Task TranscribeAsync(ITranscriber transcriber, ChannelReader<AudioChunk> windows)
+        private static async Task TranscribeNaiveAsync(ITranscriber transcriber, ChannelReader<AudioChunk> windows)
         {
             await foreach (var window in windows.ReadAllAsync())
             {

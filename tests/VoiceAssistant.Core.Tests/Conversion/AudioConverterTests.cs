@@ -87,6 +87,16 @@ namespace VoiceAssistant.Core.Tests.Conversion
         }
 
         [Test]
+        public void LongInputConvertsInOneCall()
+        {
+            // Longer than the converter's internal staging buffer.
+            var output = new AudioConverter(Device48K).Convert(StereoSine(Device48K, TimeSpan.FromSeconds(30)));
+
+            output.Length.ShouldBeInRange(475_200, 484_800); // 30 s ±1%
+            MeasureFrequency(output).ShouldBe(Frequency, tolerance: 1);
+        }
+
+        [Test]
         public void SixteenKilohertzMonoPassesThroughUnchanged()
         {
             var format = WaveFormat.CreateIeeeFloatWaveFormat(16_000, 1);

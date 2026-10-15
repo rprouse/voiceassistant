@@ -87,6 +87,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 - **WASAPI shared mode only.** Never use exclusive mode: other capture apps (e.g. Granola) must keep working.
 - **Core has no WPF/UI references.** Dispatcher marshalling happens only inside the WPF sink (the view model's `ITranscriptSink` implementation).
 - **`TranscriptEvent` and its subtypes stay plain, serialisable records**, so they could later go over a local pipe to another process. Don't put UI types, delegates, or `Span`s in them.
+- **Utterance ids:** every provisional and committed caption for an utterance shares the utterance's id, so sinks replace text in place. `SegmentRetracted` removes provisional text whose final turned out to be a hallucination.
 - **Several consumers:** UI, session file, and the future LLM are all `ITranscriptSink`s. Never assume the UI is the only consumer.
 - **VAD sits behind `IVoiceActivityDetector`** so it can be swapped later. `EnergyVad` is the first implementation.
 - **All tunables live in `appsettings.json`**, bound to options classes (`IOptions<T>`) through `Microsoft.Extensions.Hosting`. No magic numbers for thresholds, intervals, or paths.
@@ -116,7 +117,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 
 ## Configuration
 
-`appsettings.json` sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
+`appsettings.json` sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice, PromptCharacters), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs, plus the `EnergyVad` thresholds: SpeechThresholdDb, SilenceThresholdDb, MinSpeechLevelDb, MinNoiseFloorDb, NoiseFloorRiseDbPerSecond), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist, NearNoiseFloorDb; keep the blocklist's defaults in `appsettings.json`, because configuration binding appends to collections initialised in code). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
 
 ## Git
 

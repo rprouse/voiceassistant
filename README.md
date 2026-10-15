@@ -54,7 +54,7 @@ The console app is for quick iteration on capture and transcription before the U
 | `record --converted` | Also writes 16 kHz mono `them-16k.wav` / `me-16k.wav` | 2 |
 | `transcribe file.wav` | Prints timestamped segments for a WAV file | 3 |
 | `live --naive [--seconds N]` | Live captions from fixed 5 s chunks (baseline); runs until Ctrl+C unless `--seconds` is given | 3 |
-| `live` | Live captions with VAD, provisional and committed lines | 4 |
+| `live [--seconds N]` | Live captions by utterance: grey provisional lines update in place, committed lines stay | 4 |
 
 ```powershell
 dotnet run --project src/VoiceAssistant.Cli -- live
@@ -72,12 +72,16 @@ Settings live in `appsettings.json`:
 
 ```json
 {
-  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": true, "GpuDevice": 1 },
+  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": true, "GpuDevice": 1,
+                "PromptCharacters": 200 },
   "Vad":      { "FrameMs": 30, "MinSpeechMs": 200, "PreRollMs": 300, "EndSilenceMs": 600,
-                "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000 },
+                "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000,
+                "SpeechThresholdDb": 10, "SilenceThresholdDb": 5, "MinSpeechLevelDb": -50,
+                "MinNoiseFloorDb": -75, "NoiseFloorRiseDbPerSecond": 2 },
   "Capture":  { "EnableMic": true, "EnableLoopback": true, "DeviceRole": "Communications",
                 "QueueCapacity": 500, "GapToleranceMs": 50 },
-  "Hallucinations": { "Blocklist": [ "Thank you.", "Thanks for watching!", "Thank you for watching." ] }
+  "Hallucinations": { "Blocklist": [ "Thank you.", "Thanks for watching!", "Thank you for watching." ],
+                      "NearNoiseFloorDb": 6 }
 }
 ```
 
@@ -87,6 +91,7 @@ Tuning tips:
 - **Captions lag behind speech:** check the real-time factor in the log or status line. If it's above ~0.5, raise `ProvisionalIntervalMs`, set `UseGpu`, or use a smaller model.
 - **Sentences split too early:** raise `EndSilenceMs`.
 - **First words clipped:** raise `PreRollMs`.
+- **Quiet speakers missed, or background noise captioned:** lower or raise `SpeechThresholdDb` (how far above the room's noise floor speech must be). `MinSpeechLevelDb` is an absolute minimum, whatever the room.
 - **Phantom "Thank you." lines:** add the phrase to `Hallucinations.Blocklist`.
 - **Wrong device captured:** captures default to the Windows *communications* device, which meeting apps use. To capture the general default device (e.g. for a video outside a call), set `Capture.DeviceRole` to `Console`.
 

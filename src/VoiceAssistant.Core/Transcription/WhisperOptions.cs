@@ -20,5 +20,8 @@ namespace VoiceAssistant.Core.Transcription
         /// lists every device ("ggml_vulkan: N = ...") when the model loads.
         /// </summary>
         public int GpuDevice { get; set; }
+
+        /// <summary>How much of the source's committed text is passed to Whisper as a prompt, for continuity.</summary>
+        public int PromptCharacters { get; set; } = 200;
     }
 }

@@ -18,10 +18,16 @@ namespace VoiceAssistant.Core.Conversion
 
         private const int ReadBlockSamples = 4_096;
 
+        // Input is staged in a BufferedWaveProvider; feed it in slices well under its
+        // capacity and drain between them, so one call can convert any amount of audio.
+        private static readonly TimeSpan StagingSlice = TimeSpan.FromSeconds(1);
+        private static readonly TimeSpan StagingCapacity = TimeSpan.FromSeconds(2);
+
         private readonly int _blockAlign;
         private readonly BufferedWaveProvider _input;
         private readonly ISampleProvider _output;
         private readonly byte[] _partialFrame;
+        private readonly int _sliceBytes;
         private int _partialFrameLength;
         private float[] _readBuffer = new float[ReadBlockSamples];
 
@@ -29,9 +35,9 @@ namespace VoiceAssistant.Core.Conversion
         {
             _blockAlign = inputFormat.BlockAlign;
             _partialFrame = new byte[_blockAlign];
+            _sliceBytes = Math.Max(_blockAlign, (int)(inputFormat.AverageBytesPerSecond * StagingSlice.TotalSeconds) / _blockAlign * _blockAlign);
 
-            // Each call's input is drained before returning, so the buffer only has to hold one call.
-            _input = new BufferedWaveProvider(inputFormat, TimeSpan.FromSeconds(10))
+            _input = new BufferedWaveProvider(inputFormat, StagingCapacity)
             {
                 ReadFully = false
             };
@@ -48,9 +54,21 @@ namespace VoiceAssistant.Core.Conversion
 
         public float[] Convert(ReadOnlySpan<byte> input)
         {
-            AddWholeFrames(input);
-
             var produced = 0;
+            do
+            {
+                var slice = input[..Math.Min(_sliceBytes, input.Length)];
+                input = input[slice.Length..];
+                AddWholeFrames(slice);
+                produced = Drain(produced);
+            }
+            while (!input.IsEmpty);
+
+            return _readBuffer.AsSpan(0, produced).ToArray();
+        }
+
+        private int Drain(int produced)
+        {
             while (true)
             {
                 if (_readBuffer.Length - produced < ReadBlockSamples)
@@ -58,11 +76,9 @@ namespace VoiceAssistant.Core.Conversion
 
                 var read = _output.Read(_readBuffer.AsSpan(produced, ReadBlockSamples));
                 if (read == 0)
-                    break;
+                    return produced;
                 produced += read;
             }
-
-            return _readBuffer.AsSpan(0, produced).ToArray();
         }
 
         /// <remarks>
