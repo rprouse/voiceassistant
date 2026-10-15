@@ -42,7 +42,7 @@ dotnet test
 dotnet run --project src/VoiceAssistant.Cli -- model get base.en
 ```
 
-This saves the model to `models/ggml-base.en.bin`, which is git-ignored. You can also download a `ggml-*.bin` file from the [whisper.cpp models on Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) and put it in `models/`.
+Run it from the repository root: it saves the model to `models/ggml-base.en.bin` (git-ignored), and the relative `Whisper:ModelPath` in `appsettings.json` is resolved against the current directory. You can also download a `ggml-*.bin` file from the [whisper.cpp models on Hugging Face](https://huggingface.co/ggerganov/whisper.cpp) and put it in `models/`.
 
 ### CLI harness
 
@@ -53,7 +53,7 @@ The console app is for quick iteration on capture and transcription before the U
 | `record --seconds 30 [-o dir]` | Writes `them.wav` and `me.wav` in the device's native format | 1 |
 | `record --converted` | Also writes 16 kHz mono `them-16k.wav` / `me-16k.wav` | 2 |
 | `transcribe file.wav` | Prints timestamped segments for a WAV file | 3 |
-| `live --naive` | Live captions from fixed 5 s chunks (baseline) | 3 |
+| `live --naive [--seconds N]` | Live captions from fixed 5 s chunks (baseline); runs until Ctrl+C unless `--seconds` is given | 3 |
 | `live` | Live captions with VAD, provisional and committed lines | 4 |
 
 ```powershell

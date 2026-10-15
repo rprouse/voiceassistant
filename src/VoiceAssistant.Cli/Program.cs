@@ -7,6 +7,7 @@ using Spectre.Console.Cli;
 using VoiceAssistant.Cli.Commands;
 using VoiceAssistant.Cli.Infrastructure;
 using VoiceAssistant.Core.Capture;
+using VoiceAssistant.Core.Transcription;
 
 var logPath = Path.Combine(
     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -27,6 +28,7 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
 builder.Logging.ClearProviders();
 builder.Services.AddSerilog(serilog);
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
+builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
 
 var app = new CommandApp(new TypeRegistrar(builder.Services));
 app.Configure(config =>
@@ -35,6 +37,19 @@ app.Configure(config =>
     config.AddCommand<RecordCommand>("record")
         .WithDescription("Record system audio (them.wav) and the microphone (me.wav) in the device's native format.")
         .WithExample("record", "--seconds", "30");
+    config.AddBranch("model", model =>
+    {
+        model.SetDescription("Manage Whisper models.");
+        model.AddCommand<ModelGetCommand>("get")
+            .WithDescription("Download a ggml Whisper model into the models folder.")
+            .WithExample("model", "get", "base.en");
+    });
+    config.AddCommand<TranscribeCommand>("transcribe")
+        .WithDescription("Transcribe a WAV file and print timestamped segments.")
+        .WithExample("transcribe", "them.wav");
+    config.AddCommand<LiveCommand>("live")
+        .WithDescription("Caption live system audio and microphone.")
+        .WithExample("live", "--naive");
 });
 
 using var cancellation = new CancellationTokenSource();

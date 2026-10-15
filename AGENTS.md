@@ -51,7 +51,7 @@ The CLI commands the spec defines, each available from the stage shown:
 | `record --converted` → also `them-16k.wav`, `me-16k.wav` | 2 |
 | `model get base.en` | 3 |
 | `transcribe file.wav` | 3 |
-| `live --naive` (fixed 5 s chunks) | 3 |
+| `live --naive [--seconds N]` (fixed 5 s chunks) | 3 |
 | `live` (VAD + utterances, provisional/committed) | 4 |
 
 ## Repository layout
@@ -111,6 +111,8 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 - Tests that need a real device or a downloaded model go in `[Category("Integration")]`. When the prerequisite is missing, skip with `Assert.Ignore` and a clear message rather than failing.
 - WAV fixtures go in `samples/`, each under ~1 MB. `*.wav` is git-ignored everywhere else.
 - Stage 2 and stage 4 list specific required tests in the spec. Implement those exactly.
+- Whisper integration tests find the repo root via `TestPaths.RepositoryRoot` and need `models/ggml-base.en.bin`. Speech fixtures in `samples/` are generated with Windows text-to-speech (`System.Speech`), not real recordings.
+- `Whisper.net.Runtime` ships its native DLLs through `build/` targets, which don't flow through project references. Reference it from every *executable* project (CLI, App, tests), not from Core.
 
 ## Configuration
 
