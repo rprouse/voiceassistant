@@ -4,7 +4,7 @@ The following task list is for scaffolding the project as described in [voiceass
 
 - [x] Stage 0 — Scaffold
 - [x] Stage 1 — Capture to WAV
-- [ ] Stage 2 — Format conversion
+- [x] Stage 2 — Format conversion
 - [ ] Stage 3 — Naive transcription
 - [ ] Stage 4 — VAD and utterance segmentation
 - [ ] Stage 5 — WPF captions UI

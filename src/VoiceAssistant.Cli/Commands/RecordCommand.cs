@@ -1,10 +1,12 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using VoiceAssistant.Core;
 using VoiceAssistant.Core.Capture;
+using VoiceAssistant.Core.Conversion;
 
 namespace VoiceAssistant.Cli.Commands
 {
@@ -29,9 +31,13 @@ namespace VoiceAssistant.Cli.Commands
             public int Seconds { get; set; }
 
             [CommandOption("-o|--output <DIRECTORY>")]
-            [Description("Folder for them.wav and me.wav.")]
+            [Description("Folder for the WAV files.")]
             [DefaultValue(".")]
             public string OutputDirectory { get; set; } = ".";
+
+            [CommandOption("-c|--converted")]
+            [Description("Also write them-16k.wav and me-16k.wav: 16 kHz mono float, as fed to Whisper.")]
+            public bool Converted { get; set; }
 
             public override ValidationResult Validate() =>
                 Seconds > 0 ? ValidationResult.Success() : ValidationResult.Error("--seconds must be greater than zero.");
@@ -54,9 +60,9 @@ namespace VoiceAssistant.Cli.Commands
             try
             {
                 if (_options.EnableLoopback)
-                    recordings.Add(new Recording(new LoopbackCapture(clock, _options, _loggerFactory.CreateLogger<LoopbackCapture>()), Path.Combine(settings.OutputDirectory, "them.wav")));
+                    recordings.Add(new Recording(new LoopbackCapture(clock, _options, _loggerFactory.CreateLogger<LoopbackCapture>()), settings, "them", _logger));
                 if (_options.EnableMic)
-                    recordings.Add(new Recording(new MicCapture(clock, _options, _loggerFactory.CreateLogger<MicCapture>()), Path.Combine(settings.OutputDirectory, "me.wav")));
+                    recordings.Add(new Recording(new MicCapture(clock, _options, _loggerFactory.CreateLogger<MicCapture>()), settings, "me", _logger));
 
                 foreach (var recording in recordings)
                     recording.Start(gapTolerance);
@@ -76,6 +82,7 @@ namespace VoiceAssistant.Cli.Commands
 
                 _logger.LogInformation("Recording stopped at {StopAt}", stopAt);
                 ShowResults(recordings);
+                AnsiConsole.MarkupLineInterpolated($"Saved to [bold]{Path.GetFullPath(settings.OutputDirectory)}[/]");
                 return 0;
             }
             finally
@@ -120,43 +127,60 @@ namespace VoiceAssistant.Cli.Commands
 
         private static void ShowResults(IEnumerable<Recording> recordings)
         {
-            var table = new Table().AddColumns("File", "Duration", "Silence inserted", "Dropped buffers");
+            var table = new Table().AddColumns("File", "Duration", "Silence inserted", "Dropped buffers", "Device glitches");
             foreach (var r in recordings)
             {
-                table.AddRow(
-                    Markup.Escape(Path.GetFullPath(r.Path)),
-                    $"{r.Duration.TotalSeconds:F3} s",
-                    $"{r.SilenceInserted.TotalSeconds:F3} s",
-                    r.Capture.DroppedBufferCount.ToString());
+                foreach (var (path, writer) in r.Outputs)
+                {
+                    table.AddRow(
+                        Markup.Escape(Path.GetFileName(path)),
+                        $"{writer.Duration.TotalSeconds:F3} s",
+                        $"{writer.SilenceInserted.TotalSeconds:F3} s",
+                        r.Capture.DroppedBufferCount.ToString(),
+                        r.Capture.DiscontinuityCount.ToString());
+                }
             }
             AnsiConsole.Write(table);
         }
 
-        /// <summary>One capture pumped into one WAV file.</summary>
+        /// <summary>One capture pumped into its native WAV file and, optionally, a converted 16 kHz one.</summary>
         private sealed class Recording : IAsyncDisposable
         {
-            private PaddedWaveWriter? _writer;
+            private readonly string _path;
+            private readonly string? _convertedPath;
+            private readonly ILogger _logger;
+            private readonly List<(string Path, PaddedWaveWriter Writer)> _outputs = [];
             private Task? _pump;
 
-            public Recording(IAudioSourceCapture capture, string path)
+            public Recording(IAudioSourceCapture capture, Settings settings, string name, ILogger logger)
             {
                 Capture = capture;
-                Path = path;
+                _path = Path.Combine(settings.OutputDirectory, $"{name}.wav");
+                _convertedPath = settings.Converted ? Path.Combine(settings.OutputDirectory, $"{name}-16k.wav") : null;
+                _logger = logger;
             }
 
             public IAudioSourceCapture Capture { get; }
 
-            public string Path { get; }
-
-            public TimeSpan Duration { get; private set; }
-
-            public TimeSpan SilenceInserted { get; private set; }
+            public IReadOnlyList<(string Path, PaddedWaveWriter Writer)> Outputs => _outputs;
 
             public void Start(TimeSpan gapTolerance)
             {
                 Capture.Start();
-                _writer = new PaddedWaveWriter(File.Create(Path), Capture.WaveFormat, gapTolerance);
-                _pump = PumpAsync(_writer);
+
+                var native = new PaddedWaveWriter(File.Create(_path), Capture.WaveFormat, gapTolerance);
+                _outputs.Add((_path, native));
+
+                PaddedWaveWriter? converted = null;
+                AudioConverter? converter = null;
+                if (_convertedPath is not null)
+                {
+                    converter = new AudioConverter(Capture.WaveFormat);
+                    converted = new PaddedWaveWriter(File.Create(_convertedPath), AudioConverter.OutputFormat, gapTolerance);
+                    _outputs.Add((_convertedPath, converted));
+                }
+
+                _pump = PumpAsync(native, converter, converted);
             }
 
             public async Task StopAsync()
@@ -168,24 +192,35 @@ namespace VoiceAssistant.Cli.Commands
 
             public void PadTo(TimeSpan stopAt)
             {
-                if (_writer is not null)
-                {
-                    _writer.PadTo(stopAt);
-                    Duration = _writer.Duration;
-                    SilenceInserted = _writer.SilenceInserted;
-                }
+                foreach (var (_, writer) in _outputs)
+                    writer.PadTo(stopAt);
             }
 
             public async ValueTask DisposeAsync()
             {
-                _writer?.Dispose();
+                foreach (var (_, writer) in _outputs)
+                    writer.Dispose();
                 await Capture.DisposeAsync();
             }
 
-            private async Task PumpAsync(PaddedWaveWriter writer)
+            private async Task PumpAsync(PaddedWaveWriter native, AudioConverter? converter, PaddedWaveWriter? converted)
             {
+                var conversionTime = TimeSpan.Zero;
                 await foreach (var buffer in Capture.ReadAllAsync())
-                    writer.Write(buffer);
+                {
+                    native.Write(buffer);
+
+                    if (converter is not null && converted is not null)
+                    {
+                        var started = Stopwatch.GetTimestamp();
+                        var chunk = converter.Convert(buffer);
+                        conversionTime += Stopwatch.GetElapsedTime(started);
+                        converted.Write(chunk);
+                    }
+                }
+
+                if (converter is not null)
+                    _logger.LogDebug("{Source} conversion took {ConversionMs:F1} ms for {AudioSeconds:F1} s of audio", Capture.Source, conversionTime.TotalMilliseconds, native.Duration.TotalSeconds);
             }
         }
     }

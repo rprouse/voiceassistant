@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using NAudio.Wave;
 
 namespace VoiceAssistant.Core.Capture
@@ -29,13 +30,18 @@ namespace VoiceAssistant.Core.Capture
         /// <summary>Total silence inserted to fill gaps.</summary>
         public TimeSpan SilenceInserted { get; private set; }
 
-        public void Write(CapturedBuffer buffer)
+        public void Write(CapturedBuffer buffer) => Write(buffer.Data, buffer.Timestamp);
+
+        /// <summary>Writes converted audio; the file's format must be <see cref="Conversion.AudioConverter.OutputFormat"/>.</summary>
+        public void Write(AudioChunk chunk) => Write(MemoryMarshal.AsBytes(chunk.Samples.AsSpan()), chunk.Timestamp);
+
+        public void Write(ReadOnlySpan<byte> data, TimeSpan timestamp)
         {
-            WriteSilence(_tracker.SilenceBefore(buffer.Timestamp));
+            WriteSilence(_tracker.SilenceBefore(timestamp));
 
             // Devices deliver whole frames; ignore any stray partial frame rather than misalign the file.
-            var length = buffer.Data.Length - (buffer.Data.Length % _blockAlign);
-            _writer.Write(buffer.Data.AsSpan(0, length));
+            var length = data.Length - (data.Length % _blockAlign);
+            _writer.Write(data[..length]);
             _tracker.Advance(length / _blockAlign);
         }
 

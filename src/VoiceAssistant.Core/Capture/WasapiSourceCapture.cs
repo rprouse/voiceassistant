@@ -16,6 +16,8 @@ namespace VoiceAssistant.Core.Capture
         // If a QPC timestamp disagrees with the wall clock by more than this, it is not trusted.
         private static readonly TimeSpan MaxQpcSkew = TimeSpan.FromSeconds(1);
 
+        private static readonly TimeSpan WarningInterval = TimeSpan.FromSeconds(5);
+
         private readonly SessionClock _clock;
         private readonly Role _deviceRole;
         private readonly ILogger _logger;
@@ -52,6 +54,8 @@ namespace VoiceAssistant.Core.Capture
 
         public long DroppedBufferCount => Interlocked.Read(ref _droppedBuffers);
 
+        public long DiscontinuityCount => Interlocked.Read(ref _discontinuities);
+
         /// <summary>The endpoint type to capture: render for loopback, capture for microphones.</summary>
         protected abstract DataFlow DeviceFlow { get; }
 
@@ -85,28 +89,21 @@ namespace VoiceAssistant.Core.Capture
 
         public async IAsyncEnumerable<CapturedBuffer> ReadAllAsync([EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
-            long reportedDrops = 0;
-            long reportedDiscontinuities = 0;
+            // Logging happens here on the reader, never in the device callback.
+            var drops = new ThrottledCountReporter(WarningInterval);
+            var glitches = new ThrottledCountReporter(WarningInterval);
 
             await foreach (var buffer in _channel.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
             {
-                // Logging happens here on the reader, never in the device callback.
-                var drops = DroppedBufferCount;
-                if (drops != reportedDrops)
-                {
-                    _logger.LogWarning("{Source} capture queue full: {Dropped} buffer(s) dropped so far", Source, drops);
-                    reportedDrops = drops;
-                }
-
-                var discontinuities = Interlocked.Read(ref _discontinuities);
-                if (discontinuities != reportedDiscontinuities)
-                {
-                    _logger.LogWarning("{Source} device reported {Count} data discontinuity(ies) so far", Source, discontinuities);
-                    reportedDiscontinuities = discontinuities;
-                }
+                var now = _clock.Elapsed;
+                LogDrops(drops.Check(DroppedBufferCount, now));
+                LogGlitches(glitches.Check(DiscontinuityCount, now));
 
                 yield return buffer;
             }
+
+            LogDrops(drops.Flush(DroppedBufferCount));
+            LogGlitches(glitches.Flush(DiscontinuityCount));
         }
 
         public async ValueTask DisposeAsync()
@@ -150,6 +147,18 @@ namespace VoiceAssistant.Core.Capture
             }
 
             return estimate < TimeSpan.Zero ? TimeSpan.Zero : estimate;
+        }
+
+        private void LogDrops(long? increase)
+        {
+            if (increase is { } count)
+                _logger.LogWarning("{Source} capture queue full: {Count} more buffer(s) dropped, {Total} total", Source, count, DroppedBufferCount);
+        }
+
+        private void LogGlitches(long? increase)
+        {
+            if (increase is { } count)
+                _logger.LogWarning("{Source} device skipped audio: {Count} more data discontinuity(ies), {Total} total", Source, count, DiscontinuityCount);
         }
 
         private void OnRecordingStopped(object? sender, StoppedEventArgs e)

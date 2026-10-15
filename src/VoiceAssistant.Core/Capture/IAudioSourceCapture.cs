@@ -15,6 +15,12 @@ namespace VoiceAssistant.Core.Capture
         /// <summary>Buffers discarded because the reader fell behind.</summary>
         long DroppedBufferCount { get; }
 
+        /// <summary>
+        /// Times the device itself reported skipped audio (WASAPI data discontinuity),
+        /// e.g. Bluetooth packet loss. Counted separately from our own drops.
+        /// </summary>
+        long DiscontinuityCount { get; }
+
         void Start();
 
         /// <summary>Stops capturing. Buffers already queued can still be read, then the stream ends.</summary>
