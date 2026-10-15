@@ -365,3 +365,10 @@ repomix-output.txt
 # SonarQube
 .sonarqube/
 coverage.xml
+
+# VoiceAssistant
+# Whisper ggml models are large and downloaded on demand
+models/
+# Recordings stay local; only small test fixtures under samples/ are tracked
+*.wav
+!samples/**/*.wav

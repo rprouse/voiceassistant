@@ -93,7 +93,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 
 ## Coding conventions
 
-- Follow `.editorconfig` (NUnit coding standards). Naming violations are **build errors**:
+- Follow `.editorconfig` (NUnit coding standards). Naming rules are enforced only in the IDE; `dotnet build` does **not** catch them, so follow them yourself:
   - PascalCase for types, methods, properties, events, and public/protected fields.
   - camelCase for parameters and locals.
   - `_camelCase` for private fields.
