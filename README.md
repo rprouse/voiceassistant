@@ -72,7 +72,7 @@ Settings live in `appsettings.json`:
 
 ```json
 {
-  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": false },
+  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": true, "GpuDevice": 1 },
   "Vad":      { "FrameMs": 30, "MinSpeechMs": 200, "PreRollMs": 300, "EndSilenceMs": 600,
                 "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000 },
   "Capture":  { "EnableMic": true, "EnableLoopback": true, "DeviceRole": "Communications",
@@ -83,6 +83,7 @@ Settings live in `appsettings.json`:
 
 Tuning tips:
 
+- **GPU:** `UseGpu` transcribes through Whisper.net's Vulkan runtime (any recent GPU driver, no CUDA install needed), falling back to the CPU if Vulkan can't load. `GpuDevice` picks the Vulkan device: laptops often list the integrated GPU as device 0, so check the log for the `ggml_vulkan: N = ...` lines when the model loads. The first GPU run after a driver update takes several extra seconds while shaders compile.
 - **Captions lag behind speech:** check the real-time factor in the log or status line. If it's above ~0.5, raise `ProvisionalIntervalMs`, set `UseGpu`, or use a smaller model.
 - **Sentences split too early:** raise `EndSilenceMs`.
 - **First words clipped:** raise `PreRollMs`.

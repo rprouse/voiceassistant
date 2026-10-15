@@ -116,7 +116,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 
 ## Configuration
 
-`appsettings.json` sections: `Whisper` (ModelPath, Language, UseGpu), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
+`appsettings.json` sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
 
 ## Git
 

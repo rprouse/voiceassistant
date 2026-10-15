@@ -3,6 +3,7 @@ using System.Runtime.CompilerServices;
 using Microsoft.Extensions.Logging;
 using Whisper.net;
 using Whisper.net.LibraryLoader;
+using Whisper.net.Logger;
 
 namespace VoiceAssistant.Core.Transcription
 {
@@ -18,6 +19,7 @@ namespace VoiceAssistant.Core.Transcription
         private readonly WhisperFactory _factory;
         private readonly WhisperProcessor _processor;
         private readonly SemaphoreSlim _gate = new(1, 1);
+        private readonly IDisposable _nativeLog;
 
         public WhisperTranscriber(WhisperOptions options, ILogger<WhisperTranscriber> logger)
         {
@@ -33,13 +35,26 @@ namespace VoiceAssistant.Core.Transcription
             }
 
             ModelName = Path.GetFileName(modelPath);
-            _factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = options.UseGpu });
+
+            // whisper.cpp's own messages (devices found, buffers allocated) go to our log.
+            _nativeLog = LogProvider.AddLogger((level, message) =>
+                _logger.Log(level is WhisperLogLevel.Error ? LogLevel.Error : level is WhisperLogLevel.Warning ? LogLevel.Warning : LogLevel.Debug,
+                    "whisper.cpp: {Message}", message?.TrimEnd()));
+
+            // Must be set before the first model load in the process. Without a GPU, load only
+            // the CPU runtime so the log reports what is really doing the work.
+            RuntimeOptions.RuntimeLibraryOrder = options.UseGpu
+                ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx]
+                : [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
+            _factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = options.UseGpu, GpuDevice = options.GpuDevice });
 
             // Reused for every call without a prompt; prompts need a processor of their own.
             _processor = CreateProcessor(prompt: null);
 
             Runtime = RuntimeOptions.LoadedLibrary?.ToString() ?? "unknown";
             _logger.LogInformation("Loaded Whisper model {Model} ({Language}) on the {Runtime} runtime", modelPath, options.Language, Runtime);
+            if (options.UseGpu && RuntimeOptions.LoadedLibrary is not RuntimeLibrary.Vulkan)
+                _logger.LogWarning("UseGpu is on but the Vulkan runtime did not load; transcribing on {Runtime}", Runtime);
         }
 
         public string ModelName { get; }
@@ -85,6 +100,7 @@ namespace VoiceAssistant.Core.Transcription
         {
             _processor.Dispose();
             _factory.Dispose();
+            _nativeLog.Dispose();
             _gate.Dispose();
         }
 

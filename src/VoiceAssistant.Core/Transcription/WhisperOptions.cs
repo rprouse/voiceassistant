@@ -9,7 +9,16 @@ namespace VoiceAssistant.Core.Transcription
 
         public string Language { get; set; } = "en";
 
-        /// <summary>Only has an effect once a GPU runtime package is installed (stage 7).</summary>
+        /// <summary>
+        /// Transcribe on the GPU through the Vulkan runtime, falling back to the CPU
+        /// if Vulkan can't load. Applies to the first model loaded in the process.
+        /// </summary>
         public bool UseGpu { get; set; }
+
+        /// <summary>
+        /// Vulkan device index. Laptops often list the integrated GPU first; the log
+        /// lists every device ("ggml_vulkan: N = ...") when the model loads.
+        /// </summary>
+        public int GpuDevice { get; set; }
     }
 }
