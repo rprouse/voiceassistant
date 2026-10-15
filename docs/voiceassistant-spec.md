@@ -1,6 +1,4 @@
-# Eavesdrop — Live Meeting Captioning (Proof of Concept)
-
-> Working name. Rename freely.
+# Voice Assistant - Live Meeting Captioning (Proof of Concept)
 
 ## 1. Purpose
 
@@ -19,14 +17,14 @@ This is phase one of a larger tool. A later phase will feed the transcript to an
 
 - Build **one stage at a time**, in order. After each stage, stop, summarise what was built, and list how to verify the acceptance criteria. Do not start the next stage until told to.
 - Each stage must leave the solution building and all tests passing.
-- Prefer small, testable classes in `Eavesdrop.Core`. Keep the WPF project thin.
+- Prefer small, testable classes in `VoiceAssistant.Core`. Keep the WPF project thin.
 - Use the latest stable NuGet versions at time of build. Where an API in this spec doesn't match the installed package version, follow the package's current API and note the difference in the stage summary rather than guessing.
 - Do not add libraries beyond those listed in §4 without asking.
 
 ## 3. Platform
 
 - Windows 10/11, x64.
-- .NET 10 (LTS), target `net10.0-windows`. If .NET 10 is unavailable on the machine, fall back to `net8.0-windows` and say so.
+- .NET 10 (LTS), target `net10.0-windows`. If .NET 10 is unavailable on the machine, do not fall back, say so and wait for the user to install it.
 - WPF for the UI.
 
 ## 4. Libraries
@@ -42,25 +40,26 @@ This is phase one of a larger tool. A later phase will feed the transcript to an
 | Hosting / DI / config | `Microsoft.Extensions.Hosting` | Generic host in the WPF app; `appsettings.json` bound to options classes. |
 | Logging | `Microsoft.Extensions.Logging` + `Serilog.Extensions.Hosting` + `Serilog.Sinks.File` | Rolling file log; pipeline timings logged at Debug. |
 | Pipelines between stages | `System.Threading.Channels` (BCL) | Bounded channels with explicit back-pressure policy. |
-| Tests | `NUnit`, `NUnit3TestAdapter`, `Microsoft.NET.Test.Sdk` | |
+| CLI | `Spectre.Console` | Used for console input and output. |
+| Tests | `NUnit`, `NUnit.Analyzers`, `NUnit3TestAdapter`, `Microsoft.NET.Test.Sdk`, `Shouldly` | Use Shouldly assertions. |
 
 ## 5. Solution layout
 
-```
-Eavesdrop.sln
+```txt
+VoiceAssistant.sln
 src/
-  Eavesdrop.Core/        class library: capture, conversion, VAD, transcription, segment model
-  Eavesdrop.Cli/         console harness used in stages 1–4 for fast iteration
-  Eavesdrop.App/         WPF app (stage 5+)
+  VoiceAssistant.Core/        class library: capture, conversion, VAD, transcription, segment model
+  VoiceAssistant.Cli/         console harness used in stages 1–4 for fast iteration
+  VoiceAssistant.App/         WPF app (stage 5+)
 tests/
-  Eavesdrop.Core.Tests/  NUnit tests
+  VoiceAssistant.Core.Tests/  NUnit tests
 models/                  ggml model files (git-ignored)
 samples/                 short WAV fixtures for tests (keep under ~1 MB each)
 ```
 
 ## 6. Architecture
 
-```
+```txt
 [Loopback capture] ─┐
                     ├─► Channel<AudioChunk> ─► [Converter: 16 kHz mono float]
 [Mic capture] ──────┘        (per source)              │
@@ -112,15 +111,17 @@ Timestamps are relative to session start, from a single `Stopwatch` shared by bo
 
 ## 7. Stages
 
+The progress on the following tasks are tracked in the checklist in [voiceassistant-tasks.md](voiceassistant-tasks.md). Update the checklist as each task is completed so we always know where we are in the project.
+
 ### Stage 0 — Scaffold
 
-Create the solution, projects, references, `.gitignore` (include `models/`, `bin/`, `obj/`, `*.wav` outside `samples/`), `Directory.Build.props` (nullable enabled, warnings as errors, latest C# version), and an empty passing test.
+Create the solution, projects, references, add to `.gitignore` if needed (include `models/`, `bin/`, `obj/`, `*.wav` outside `samples/`), `Directory.Build.props` (nullable enabled, warnings as errors, latest C# version), and an empty passing test.
 
 **Accept when:** `dotnet build` and `dotnet test` succeed from the repo root.
 
 ### Stage 1 — Capture to WAV
 
-In Core, implement `LoopbackCapture` and `MicCapture` over NAudio. In the CLI, `eavesdrop record --seconds 30` writes `them.wav` and `me.wav` in the native device format.
+In Core, implement `LoopbackCapture` and `MicCapture` over NAudio. In the CLI, `VoiceAssistant record --seconds 30` writes `them.wav` and `me.wav` in the native device format.
 
 Handle: device format varies (commonly 32-bit IEEE float, 48 kHz, stereo); loopback raises **no** `DataAvailable` events while nothing is playing, so the pipeline must tolerate gaps and pad with silence based on elapsed time; the default device can change mid-session (log it; recovery can wait until stage 7).
 
@@ -130,7 +131,7 @@ Handle: device format varies (commonly 32-bit IEEE float, 48 kHz, stereo); loopb
 
 Implement `AudioConverter`: native format → 16 kHz, mono, 32-bit float (the format Whisper.net consumes). Downmix by averaging channels. Resample with `WdlResamplingSampleProvider`.
 
-CLI: `eavesdrop record --converted` additionally writes `them-16k.wav` / `me-16k.wav`.
+CLI: `VoiceAssistant record --converted` additionally writes `them-16k.wav` / `me-16k.wav`.
 
 Tests: converting a generated 48 kHz stereo sine produces correct length (±1%) and frequency; silence stays silence; odd buffer sizes across chunk boundaries don't click or drop samples.
 
@@ -138,9 +139,9 @@ Tests: converting a generated 48 kHz stereo sine produces correct length (±1%) 
 
 ### Stage 3 — Naive transcription
 
-Implement `WhisperTranscriber` over Whisper.net. Model path and language come from config. Add a CLI command to download a model (`eavesdrop model get base.en`) using Whisper.net's ggml downloader if available in the installed version; otherwise document the manual download.
+Implement `WhisperTranscriber` over Whisper.net. Model path and language come from config. Add a CLI command to download a model (`VoiceAssistant model get base.en`) using Whisper.net's ggml downloader if available in the installed version; otherwise document the manual download.
 
-CLI: `eavesdrop transcribe file.wav` prints segments with timestamps. `eavesdrop live --naive` transcribes fixed, non-overlapping 5-second chunks of live audio and prints them.
+CLI: `VoiceAssistant transcribe file.wav` prints segments with timestamps. `VoiceAssistant live --naive` transcribes fixed, non-overlapping 5-second chunks of live audio and prints them.
 
 Default model: `base.en`. Make `small.en` a one-line config change.
 
@@ -163,7 +164,7 @@ All thresholds live in `appsettings.json`.
 
 Tests (using `samples/` fixtures and synthetic audio): silence produces zero segments; a single spoken sentence produces exactly one committed segment; two sentences separated by a 1 s pause produce two; a 20 s monologue is split without exceeding the max length.
 
-**Accept when:** `eavesdrop live` prints provisional lines that update in place and committed lines that stick, and captions feel sentence-shaped rather than chopped.
+**Accept when:** `VoiceAssistant live` prints provisional lines that update in place and committed lines that stick, and captions feel sentence-shaped rather than chopped.
 
 *Alternative if utterance segmentation proves inadequate for long unbroken speech:* a LocalAgreement-style sliding window (re-transcribe a rolling window, commit only the prefix that two consecutive passes agree on). Don't build this unless asked.
 
@@ -192,7 +193,7 @@ Handle crosstalk sensibly: if both sources have utterances ready, process in ord
 ### Stage 7 — Hardening
 
 - GPU runtime opt-in via config; log which runtime Whisper.net actually loaded.
-- Save each session's committed transcript to `%LOCALAPPDATA%\Eavesdrop\sessions\yyyy-MM-dd_HHmm.md` (implemented as another `ITranscriptSink`).
+- Save each session's committed transcript to `%LOCALAPPDATA%\VoiceAssistant\sessions\yyyy-MM-dd_HHmm.md` (implemented as another `ITranscriptSink`).
 - Recover from default-device changes by restarting the affected capture.
 - Settings dialog for model, language, and the VAD thresholds from stage 4.
 - Clean shutdown: Stop flushes the in-progress utterance as a final commit.
@@ -234,4 +235,3 @@ The future assistant will be another `ITranscriptSink` subscribed to `SegmentCom
 
 - **CPU headroom:** provisional passes multiply transcription work. If the real-time factor on `base.en` exceeds ~0.5 on CPU, raise `ProvisionalIntervalMs` or enable GPU before blaming the design.
 - **Whisper hallucination on silence/noise:** mitigated by VAD and the blocklist, not eliminated.
-- **Recording consent:** this captures other people's voices. Being local-only helps; it doesn't settle the question for every jurisdiction or employer policy.
