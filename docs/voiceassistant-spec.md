@@ -46,7 +46,7 @@ This is phase one of a larger tool. A later phase will feed the transcript to an
 ## 5. Solution layout
 
 ```txt
-VoiceAssistant.sln
+VoiceAssistant.slnx
 src/
   VoiceAssistant.Core/        class library: capture, conversion, VAD, transcription, segment model
   VoiceAssistant.Cli/         console harness used in stages 1–4 for fast iteration
