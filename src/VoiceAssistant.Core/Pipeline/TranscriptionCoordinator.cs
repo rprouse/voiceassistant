@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Threading.Channels;
 using Microsoft.Extensions.Logging;
 using VoiceAssistant.Core.Segmentation;
@@ -16,6 +17,9 @@ namespace VoiceAssistant.Core.Pipeline
         // Enough to absorb a burst of finals from both sources without stalling capture.
         private const int QueueCapacity = 8;
 
+        // Weight of the newest measurement in the smoothed real-time factor.
+        private const double RealTimeFactorSmoothing = 0.2;
+
         private readonly ITranscriber _transcriber;
         private readonly HallucinationFilter _filter;
         private readonly ChannelWriter<TranscriptEvent> _events;
@@ -27,6 +31,7 @@ namespace VoiceAssistant.Core.Pipeline
         private int _busy;
         private long _skippedProvisional;
         private long _hallucinations;
+        private double _realTimeFactor = double.NaN;
 
         public TranscriptionCoordinator(
             ITranscriber transcriber,
@@ -49,6 +54,12 @@ namespace VoiceAssistant.Core.Pipeline
 
         /// <summary>Provisional passes skipped because the transcriber was busy.</summary>
         public long SkippedProvisionalCount => Interlocked.Read(ref _skippedProvisional);
+
+        /// <summary>
+        /// Smoothed transcription time divided by audio duration; below 1 keeps up with
+        /// real time. NaN until the first transcription.
+        /// </summary>
+        public double RealTimeFactor => Volatile.Read(ref _realTimeFactor);
 
         /// <summary>Committed utterances discarded as hallucinations.</summary>
         public long HallucinationCount => Interlocked.Read(ref _hallucinations);
@@ -91,8 +102,10 @@ namespace VoiceAssistant.Core.Pipeline
         private async Task ProcessAsync(UtteranceUpdate update, CancellationToken cancellationToken)
         {
             var parts = new List<string>();
+            var started = Stopwatch.GetTimestamp();
             await foreach (var segment in _transcriber.TranscribeAsync(update.Source, update.Start, update.Samples, PromptFor(update.Source), cancellationToken).ConfigureAwait(false))
                 parts.Add(segment.Text);
+            RecordRealTimeFactor(Stopwatch.GetElapsedTime(started), update.Duration);
 
             var text = HallucinationFilter.Clean(string.Join(" ", parts));
 
@@ -120,6 +133,16 @@ namespace VoiceAssistant.Core.Pipeline
 
             Remember(update.Source, text);
             await _events.WriteAsync(new SegmentCommitted(ToSegment(update, text)), cancellationToken).ConfigureAwait(false);
+        }
+
+        private void RecordRealTimeFactor(TimeSpan elapsed, TimeSpan audio)
+        {
+            if (audio <= TimeSpan.Zero)
+                return;
+
+            var latest = elapsed / audio;
+            var previous = Volatile.Read(ref _realTimeFactor);
+            Volatile.Write(ref _realTimeFactor, double.IsNaN(previous) ? latest : previous + (latest - previous) * RealTimeFactorSmoothing);
         }
 
         private static TranscriptSegment ToSegment(UtteranceUpdate update, string text) =>

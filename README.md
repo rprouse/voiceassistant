@@ -66,9 +66,11 @@ dotnet run --project src/VoiceAssistant.Cli -- live
 dotnet run --project src/VoiceAssistant.App
 ```
 
+The model loads in the background when the window opens; press **Start** once the status line says *Ready*. Captions appear one row per utterance: grey italic text is provisional and is replaced in place when the utterance is committed. The list follows new captions unless you scroll up, and resumes when you scroll back to the bottom. 📌 keeps the window on top of your meeting, and the slider sets its opacity. Closing the window while captioning commits what was being said before exiting.
+
 ## Configuration
 
-Settings live in `appsettings.json`:
+Settings live in `src/appsettings.json`, shared by the CLI and the desktop app:
 
 ```json
 {

@@ -62,7 +62,8 @@ Directory.Build.props           # Nullable=enable, TreatWarningsAsErrors=true, L
 src/
   VoiceAssistant.Core/          # capture, conversion, VAD, transcription, segment model. NO WPF refs.
   VoiceAssistant.Cli/           # Spectre.Console harness for stages 1–4
-  VoiceAssistant.App/           # WPF + generic host (stage 5+)
+  VoiceAssistant.App/           # WPF + generic host (stage 5+); MainViewModel is an ITranscriptSink
+  appsettings.json              # shared settings, linked into Cli and App
 tests/
   VoiceAssistant.Core.Tests/    # NUnit + Shouldly
 models/                         # ggml model files — git-ignored, never commit
@@ -117,7 +118,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 
 ## Configuration
 
-`appsettings.json` sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice, PromptCharacters), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs, plus the `EnergyVad` thresholds: SpeechThresholdDb, SilenceThresholdDb, MinSpeechLevelDb, MinNoiseFloorDb, NoiseFloorRiseDbPerSecond), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist, NearNoiseFloorDb; keep the blocklist's defaults in `appsettings.json`, because configuration binding appends to collections initialised in code). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
+`src/appsettings.json` is linked into both the CLI and the WPF app, so there is one copy of the settings. Sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice, PromptCharacters), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs, plus the `EnergyVad` thresholds: SpeechThresholdDb, SilenceThresholdDb, MinSpeechLevelDb, MinNoiseFloorDb, NoiseFloorRiseDbPerSecond), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist, NearNoiseFloorDb; keep the blocklist's defaults in `appsettings.json`, because configuration binding appends to collections initialised in code). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
 
 ## Git
 

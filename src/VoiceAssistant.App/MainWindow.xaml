@@ -3,10 +3,182 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-        xmlns:local="clr-namespace:VoiceAssistant.App"
+        xmlns:core="clr-namespace:VoiceAssistant.Core;assembly=VoiceAssistant.Core"
+        xmlns:vm="clr-namespace:VoiceAssistant.App.ViewModels"
         mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        d:DataContext="{d:DesignInstance Type=vm:MainViewModel}"
+        Title="Voice Assistant"
+        Width="600" Height="420" MinWidth="360" MinHeight="180"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent" ResizeMode="CanResize"
+        Topmost="{Binding IsAlwaysOnTop}"
+        Opacity="{Binding WindowOpacity}">
 
-    </Grid>
+    <!-- Window opacity needs a transparent, borderless window, so the title bar is drawn here. -->
+    <WindowChrome.WindowChrome>
+        <WindowChrome CaptionHeight="40" ResizeBorderThickness="6" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False" />
+    </WindowChrome.WindowChrome>
+
+    <Window.Resources>
+        <SolidColorBrush x:Key="WindowBrush" Color="#FF1E1F22" />
+        <SolidColorBrush x:Key="BarBrush" Color="#FF2B2D31" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#FF3F4147" />
+        <SolidColorBrush x:Key="TextBrush" Color="#FFE6E6E6" />
+        <SolidColorBrush x:Key="MutedBrush" Color="#FF8E939B" />
+        <SolidColorBrush x:Key="MeBrush" Color="#FF2F9E5B" />
+        <SolidColorBrush x:Key="ThemBrush" Color="#FF5865F2" />
+        <SolidColorBrush x:Key="HoverBrush" Color="#33FFFFFF" />
+
+        <Style x:Key="BarButton" TargetType="Button">
+            <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="10,4" />
+            <Setter Property="MinWidth" Value="32" />
+            <Setter Property="WindowChrome.IsHitTestVisibleInChrome" Value="True" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Chrome" Background="{TemplateBinding Background}" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter Property="Opacity" Value="0.4" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="StartStopButton" TargetType="Button" BasedOn="{StaticResource BarButton}">
+            <Setter Property="Background" Value="{StaticResource MeBrush}" />
+            <Setter Property="Foreground" Value="White" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="MinWidth" Value="64" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                    <Setter Property="Background" Value="#FFD83C3E" />
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate DataType="{x:Type vm:CaptionViewModel}">
+            <Grid Margin="12,5">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="{Binding Time}" Foreground="{StaticResource MutedBrush}" FontFamily="Consolas" FontSize="12"
+                           Margin="0,3,10,0" VerticalAlignment="Top" />
+                <Border x:Name="Badge" Grid.Column="1" Width="46" CornerRadius="3" Padding="0,2" Margin="0,1,10,0"
+                        VerticalAlignment="Top" Background="{StaticResource ThemBrush}">
+                    <TextBlock Text="{Binding SourceLabel}" Foreground="White" FontSize="11" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                </Border>
+                <TextBlock x:Name="CaptionText" Grid.Column="2" Text="{Binding Text}" TextWrapping="Wrap"
+                           Foreground="{StaticResource TextBrush}" FontSize="15" LineHeight="21" />
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Source}" Value="{x:Static core:AudioSource.Me}">
+                    <Setter TargetName="Badge" Property="Background" Value="{StaticResource MeBrush}" />
+                </DataTrigger>
+                <DataTrigger Binding="{Binding IsProvisional}" Value="True">
+                    <Setter TargetName="CaptionText" Property="FontStyle" Value="Italic" />
+                    <Setter TargetName="CaptionText" Property="Foreground" Value="{StaticResource MutedBrush}" />
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </Window.Resources>
+
+    <Border Background="{StaticResource WindowBrush}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="40" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Title bar: drag anywhere that isn't a control. -->
+            <DockPanel Grid.Row="0" Background="{StaticResource BarBrush}" LastChildFill="True">
+                <Button DockPanel.Dock="Left" Margin="6,6,8,6" Style="{StaticResource StartStopButton}"
+                        Content="{Binding ToggleText}" Command="{Binding ToggleCommand}" ToolTip="Start or stop captioning" />
+                <TextBlock DockPanel.Dock="Left" Text="{Binding Elapsed}" Foreground="{StaticResource TextBrush}"
+                           FontFamily="Consolas" FontSize="14" VerticalAlignment="Center" />
+
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="✕" Margin="0,6,6,6"
+                        Click="OnCloseClick" ToolTip="Close" />
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="—" Margin="0,6,2,6"
+                        Click="OnMinimizeClick" ToolTip="Minimise" />
+                <Slider DockPanel.Dock="Right" Width="80" Minimum="0.3" Maximum="1" Margin="4,0,8,0" VerticalAlignment="Center"
+                        Value="{Binding WindowOpacity}" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Opacity" />
+                <ToggleButton DockPanel.Dock="Right" Margin="0,6,2,6" IsChecked="{Binding IsAlwaysOnTop}"
+                              WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Always on top">
+                    <ToggleButton.Template>
+                        <ControlTemplate TargetType="ToggleButton">
+                            <Border x:Name="Chrome" Background="Transparent" CornerRadius="4" Padding="8,4">
+                                <TextBlock x:Name="Pin" Text="📌" Foreground="{StaticResource MutedBrush}" Opacity="0.5" VerticalAlignment="Center" />
+                            </Border>
+                            <ControlTemplate.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter TargetName="Chrome" Property="Background" Value="{StaticResource HoverBrush}" />
+                                </Trigger>
+                                <Trigger Property="IsChecked" Value="True">
+                                    <Setter TargetName="Pin" Property="Opacity" Value="1" />
+                                </Trigger>
+                            </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                    </ToggleButton.Template>
+                </ToggleButton>
+
+                <TextBlock Text="Voice Assistant" Foreground="{StaticResource MutedBrush}" FontSize="12"
+                           VerticalAlignment="Center" HorizontalAlignment="Center" />
+            </DockPanel>
+
+            <!-- Captions. Virtualised, so long sessions don't build up UI elements. -->
+            <ItemsControl x:Name="CaptionList" Grid.Row="1" ItemsSource="{Binding Captions}" Padding="0,6"
+                          VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling"
+                          VirtualizingPanel.ScrollUnit="Pixel" ScrollViewer.CanContentScroll="True">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <VirtualizingStackPanel />
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.Template>
+                    <ControlTemplate TargetType="ItemsControl">
+                        <ScrollViewer x:Name="PART_ScrollViewer" CanContentScroll="True" Focusable="False"
+                                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                                      Padding="{TemplateBinding Padding}">
+                            <ItemsPresenter />
+                        </ScrollViewer>
+                    </ControlTemplate>
+                </ItemsControl.Template>
+            </ItemsControl>
+
+            <TextBlock Grid.Row="1"
+                       Foreground="{StaticResource MutedBrush}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" TextAlignment="Center" Margin="24" IsHitTestVisible="False">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Setter Property="Text" Value="Press Start to caption system audio and your microphone." />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding Captions.Count}" Value="0">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding IsRunning}" Value="True">
+                                <Setter Property="Text" Value="Listening…" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <Border Grid.Row="2" Background="{StaticResource BarBrush}" Padding="10,4">
+                <TextBlock Text="{Binding Status}" Foreground="{StaticResource MutedBrush}" FontSize="11" TextTrimming="CharacterEllipsis" />
+            </Border>
+        </Grid>
+    </Border>
 </Window>

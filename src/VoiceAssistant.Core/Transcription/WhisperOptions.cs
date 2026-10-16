@@ -4,7 +4,7 @@ namespace VoiceAssistant.Core.Transcription
     {
         public const string SectionName = "Whisper";
 
-        /// <summary>A ggml model file; relative paths resolve against the current directory.</summary>
+        /// <summary>A ggml model file. Relative paths are looked for in the current directory, then above the executable.</summary>
         public string ModelPath { get; set; } = "models/ggml-base.en.bin";
 
         public string Language { get; set; } = "en";

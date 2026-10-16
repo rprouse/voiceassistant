@@ -2,6 +2,9 @@ namespace VoiceAssistant.Core.Transcription
 {
     public interface ITranscriber
     {
+        /// <summary>What is doing the transcription, for status displays, e.g. "ggml-base.en.bin on Vulkan".</summary>
+        string Description { get; }
+
         /// <summary>
         /// Transcribes 16 kHz mono float audio. Calls are serialised: one transcriber
         /// is shared by every source because models are memory-heavy.

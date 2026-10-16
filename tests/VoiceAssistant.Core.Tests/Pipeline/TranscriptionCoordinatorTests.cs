@@ -160,6 +160,17 @@ namespace VoiceAssistant.Core.Tests.Pipeline
         }
 
         [Test]
+        public async Task RealTimeFactorIsMeasured()
+        {
+            _coordinator.RealTimeFactor.ShouldBe(double.NaN);
+
+            await _coordinator.SubmitAsync(Final());
+            await FinishAsync();
+
+            _coordinator.RealTimeFactor.ShouldBeInRange(0, 1);
+        }
+
+        [Test]
         public async Task TranscriptionFailureDoesNotStopTheCoordinator()
         {
             _transcriber.Respond = call => call == 0 ? "throw" : "recovered";

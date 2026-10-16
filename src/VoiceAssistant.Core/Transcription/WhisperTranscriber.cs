@@ -26,7 +26,7 @@ namespace VoiceAssistant.Core.Transcription
             _options = options;
             _logger = logger;
 
-            var modelPath = Path.GetFullPath(options.ModelPath);
+            var modelPath = Transcription.ModelPath.Resolve(options.ModelPath);
             if (!File.Exists(modelPath))
             {
                 var name = Path.GetFileNameWithoutExtension(modelPath).Replace("ggml-", string.Empty, StringComparison.OrdinalIgnoreCase);
@@ -58,6 +58,8 @@ namespace VoiceAssistant.Core.Transcription
         }
 
         public string ModelName { get; }
+
+        public string Description => $"{ModelName} on {Runtime}";
 
         /// <summary>The native whisper.cpp runtime Whisper.net actually loaded, e.g. Cpu or Cuda.</summary>
         public string Runtime { get; }

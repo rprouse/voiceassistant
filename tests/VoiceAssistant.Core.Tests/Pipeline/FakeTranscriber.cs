@@ -8,6 +8,8 @@ namespace VoiceAssistant.Core.Tests.Pipeline
     {
         private TaskCompletionSource? _gate;
 
+        public string Description => "Fake";
+
         public List<(AudioSource Source, TimeSpan Start, int Samples, string? Prompt)> Calls { get; } = [];
 
         /// <summary>What to "hear" for a call, by call number (0-based); defaults to "utterance N".</summary>
