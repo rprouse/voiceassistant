@@ -8,5 +8,5 @@ The following task list is for scaffolding the project as described in [voiceass
 - [x] Stage 3 — Naive transcription
 - [x] Stage 4 — VAD and utterance segmentation
 - [ ] Stage 5 — WPF captions UI (built and smoke-tested; 30-minute soak test pending)
-- [ ] Stage 6 — Both sources together
+- [ ] Stage 6 — Both sources together (built; real-call test pending)
 - [ ] Stage 7 — Hardening

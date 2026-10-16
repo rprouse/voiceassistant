@@ -116,6 +116,7 @@ Tuning tips:
 - Each source runs its own capture → convert → VAD pipeline. Both share **one** transcriber, because Whisper models are memory-heavy.
 - An energy-based VAD with hysteresis finds speech. An utterance builder adds a little pre-roll and ends an utterance after a pause, or at a quiet point once it reaches the maximum length.
 - While someone is talking, the audio so far is re-transcribed about once a second (**provisional**). When they stop, the full utterance is transcribed once more and **committed**. The last part of the committed text is passed back as a prompt so the next utterance continues naturally.
+- When both sources have finished utterances waiting, the one that ended first is transcribed first, and captions are shown in start-time order. A long "Them" sentence that began before your reply appears above it, even though it finished later.
 - When the system falls behind, raw audio is dropped (and counted) rather than letting lag build up. Committed transcriptions are never dropped.
 
 See the [full spec](docs/voiceassistant-spec.md) for details.

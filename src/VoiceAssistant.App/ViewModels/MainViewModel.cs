@@ -26,7 +26,7 @@ namespace VoiceAssistant.App.ViewModels
         private readonly ILogger<MainViewModel> _logger;
         private readonly Dispatcher _dispatcher;
         private readonly DispatcherTimer _timer;
-        private readonly Dictionary<Guid, CaptionViewModel> _captionsById = [];
+        private readonly CaptionTimeline _timeline = new();
 
         private WhisperTranscriber? _transcriber;
         private CaptionSession? _session;
@@ -154,7 +154,7 @@ namespace VoiceAssistant.App.ViewModels
             try
             {
                 Captions.Clear();
-                _captionsById.Clear();
+                _timeline.Clear();
 
                 _clock = new SessionClock();
                 _deviceMonitor = new DefaultDeviceMonitor(_loggerFactory.CreateLogger<DefaultDeviceMonitor>());
@@ -186,34 +186,22 @@ namespace VoiceAssistant.App.ViewModels
             }
         }
 
+        // The timeline keeps both sources' captions in start-time order and says where
+        // each change goes; the collection mirrors it.
         private void Apply(TranscriptEvent transcriptEvent)
         {
-            switch (transcriptEvent)
+            switch (_timeline.Apply(transcriptEvent))
             {
-                case SegmentProvisional { Segment: var segment }:
-                    AddOrUpdate(segment);
+                case CaptionInserted inserted:
+                    Captions.Insert(inserted.Index, new CaptionViewModel(inserted.Segment));
                     break;
-                case SegmentCommitted { Segment: var segment }:
-                    AddOrUpdate(segment);
+                case CaptionUpdated updated:
+                    Captions[updated.Index].Update(updated.Segment);
                     break;
-                case SegmentRetracted retracted when _captionsById.Remove(retracted.Id, out var caption):
-                    Captions.Remove(caption);
+                case CaptionRemoved removed:
+                    Captions.RemoveAt(removed.Index);
                     break;
             }
-        }
-
-        // Every snapshot of an utterance shares its id, so provisional text is replaced in place.
-        private void AddOrUpdate(TranscriptSegment segment)
-        {
-            if (_captionsById.TryGetValue(segment.Id, out var caption))
-            {
-                caption.Update(segment);
-                return;
-            }
-
-            caption = new CaptionViewModel(segment);
-            _captionsById.Add(segment.Id, caption);
-            Captions.Add(caption);
         }
 
         private void Refresh()

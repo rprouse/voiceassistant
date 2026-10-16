@@ -65,14 +65,39 @@ namespace VoiceAssistant.Core.Tests.Pipeline
             text.ShouldContain("risks", Case.Insensitive);
         }
 
+        [Test]
+        public async Task BothSourcesAreCaptionedWithTheRightLabelsInTimeOrder()
+        {
+            // Overlapping speech: Them says two sentences while Me says one in the gap.
+            var them = Padded("two-sentences.wav");
+            var me = TestAudio.WithRoomNoise(TestAudio.Concat(
+                TestAudio.Silence(4.5), TestAudio.LoadSample("quick-brown-fox.wav"), TestAudio.Silence(1.5)));
+
+            var events = await CaptionAsync([new FakeCapture(AudioSource.Them, them), new FakeCapture(AudioSource.Me, me)]);
+
+            var timeline = new CaptionTimeline();
+            foreach (var transcriptEvent in events)
+                timeline.Apply(transcriptEvent);
+            var captions = timeline.Captions;
+
+            captions.ShouldAllBe(c => c.IsFinal);
+            captions.Select(c => c.Start).ShouldBeInOrder(SortDirection.Ascending);
+            captions.Where(c => c.Source == AudioSource.Them).Select(c => c.Text).ShouldSatisfyAllConditions(
+                t => string.Join(" ", t).ShouldContain("meeting starts", Case.Insensitive),
+                t => string.Join(" ", t).ShouldContain("notes", Case.Insensitive));
+            captions.Where(c => c.Source == AudioSource.Me).ShouldHaveSingleItem().Text.ShouldContain("quick brown fox", Case.Insensitive);
+        }
+
         private static float[] Padded(string sample) =>
             TestAudio.WithRoomNoise(TestAudio.Concat(TestAudio.Silence(1), TestAudio.LoadSample(sample), TestAudio.Silence(1.5)));
 
-        private async Task<List<TranscriptEvent>> CaptionAsync(float[] signal)
+        private Task<List<TranscriptEvent>> CaptionAsync(float[] signal) => CaptionAsync([new FakeCapture(AudioSource.Them, signal)]);
+
+        private async Task<List<TranscriptEvent>> CaptionAsync(IReadOnlyList<FakeCapture> captures)
         {
             var sink = new CollectingSink();
             var session = new CaptionSession(
-                [new FakeCapture(AudioSource.Them, signal)],
+                captures,
                 _transcriber,
                 new VadOptions(),
                 new HallucinationOptions { Blocklist = ["Thank you.", "Thanks for watching!", "Thank you for watching."] },

@@ -103,6 +103,47 @@ namespace VoiceAssistant.Core.Tests.Pipeline
         }
 
         [Test]
+        public async Task WaitingFinalsFromBothSourcesGoInOrderOfUtteranceEndTime()
+        {
+            _transcriber.Block();
+            await _coordinator.SubmitAsync(Final(AudioSource.Me, start: 0));
+            await _transcriber.Started.WaitAsync();
+
+            // Crosstalk: Me's utterance arrives first but Them's ended earlier.
+            var me = Final(AudioSource.Me, start: 9.5);       // ends 10.5
+            var them = Final(AudioSource.Them, start: 9);     // ends 10.0
+            var later = Final(AudioSource.Them, start: 11);   // ends 12.0
+            await _coordinator.SubmitAsync(later);
+            await _coordinator.SubmitAsync(me);
+            await _coordinator.SubmitAsync(them);
+            _transcriber.Release();
+            var events = await FinishAsync();
+
+            events.Cast<SegmentCommitted>().Skip(1).Select(e => e.Segment.Id).ShouldBe([them.UtteranceId, me.UtteranceId, later.UtteranceId]);
+        }
+
+        [Test]
+        public async Task ProvisionalWhoseFinalIsAlreadyWaitingIsDiscarded()
+        {
+            // A coordinator that hasn't started yet, so both snapshots are waiting together.
+            var transcriber = new FakeTranscriber();
+            var events = Channel.CreateUnbounded<TranscriptEvent>();
+            var coordinator = new TranscriptionCoordinator(
+                transcriber, new HallucinationFilter(new HallucinationOptions()), events.Writer, 40, NullLogger<TranscriptionCoordinator>.Instance);
+            var id = Guid.NewGuid();
+
+            await coordinator.SubmitAsync(Provisional(id));
+            await coordinator.SubmitAsync(Final(id: id));
+            coordinator.Complete();
+            await coordinator.RunAsync().WaitAsync(TimeSpan.FromSeconds(10));
+
+            transcriber.Calls.Count.ShouldBe(1);
+            coordinator.SkippedProvisionalCount.ShouldBe(1);
+            events.Writer.Complete();
+            (await events.Reader.ReadAllAsync().ToListAsync()).ShouldHaveSingleItem().ShouldBeOfType<SegmentCommitted>();
+        }
+
+        [Test]
         public async Task PromptIsTheTailOfTheSameSourcesCommittedText()
         {
             _transcriber.Respond = call => call switch

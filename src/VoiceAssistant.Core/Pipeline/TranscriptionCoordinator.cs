@@ -9,8 +9,9 @@ namespace VoiceAssistant.Core.Pipeline
     /// <summary>
     /// Feeds utterance snapshots from every source through the one shared transcriber
     /// and turns the results into transcript events. Final snapshots queue with
-    /// back-pressure and are never dropped; provisional snapshots are skipped whenever
-    /// the transcriber is busy or work is waiting.
+    /// back-pressure and are never dropped, and when several are waiting the one whose
+    /// utterance ended first goes next, whichever source it came from. Provisional
+    /// snapshots are skipped whenever the transcriber is busy or work is waiting.
     /// </summary>
     public sealed class TranscriptionCoordinator
     {
@@ -81,8 +82,22 @@ namespace VoiceAssistant.Core.Pipeline
 
         public async Task RunAsync(CancellationToken cancellationToken = default)
         {
-            await foreach (var update in _queue.Reader.ReadAllAsync(cancellationToken).ConfigureAwait(false))
+            var waiting = new List<UtteranceUpdate>();
+            while (true)
             {
+                // Gather what's queued so snapshots from different sources can be ordered.
+                // Taking at most a queue's worth keeps back-pressure on the producers.
+                while (waiting.Count < QueueCapacity && _queue.Reader.TryRead(out var queued))
+                    waiting.Add(queued);
+
+                if (waiting.Count == 0)
+                {
+                    if (!await _queue.Reader.WaitToReadAsync(cancellationToken).ConfigureAwait(false))
+                        return;
+                    continue;
+                }
+
+                var update = TakeNext(waiting);
                 Volatile.Write(ref _busy, 1);
                 try
                 {
@@ -97,6 +112,29 @@ namespace VoiceAssistant.Core.Pipeline
                     Volatile.Write(ref _busy, 0);
                 }
             }
+        }
+
+        // The earliest-ending final first; a provisional only when no final is waiting.
+        private UtteranceUpdate TakeNext(List<UtteranceUpdate> waiting)
+        {
+            UtteranceUpdate? next = null;
+            foreach (var candidate in waiting)
+            {
+                if (next is null
+                    || candidate.IsFinal && !next.IsFinal
+                    || candidate.IsFinal == next.IsFinal && candidate.End < next.End)
+                {
+                    next = candidate;
+                }
+            }
+
+            waiting.Remove(next!);
+
+            // A provisional pass for an utterance whose final is about to run would only flash stale text.
+            if (next!.IsFinal)
+                Interlocked.Add(ref _skippedProvisional, waiting.RemoveAll(u => !u.IsFinal && u.UtteranceId == next.UtteranceId));
+
+            return next;
         }
 
         private async Task ProcessAsync(UtteranceUpdate update, CancellationToken cancellationToken)
