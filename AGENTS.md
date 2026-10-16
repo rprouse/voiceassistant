@@ -88,6 +88,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 - **WASAPI shared mode only.** Never use exclusive mode: other capture apps (e.g. Granola) must keep working.
 - **Core has no WPF/UI references.** Dispatcher marshalling happens only inside the WPF sink (the view model's `ITranscriptSink` implementation).
 - **`TranscriptEvent` and its subtypes stay plain, serialisable records**, so they could later go over a local pipe to another process. Don't put UI types, delegates, or `Span`s in them.
+- **Device changes:** a capture can move to a different device mid-session, so every `CapturedBuffer` carries its `WaveFormat`. Never assume the format a capture started with; `AudioConverter.ConvertAllAsync` rebuilds its converter when the format changes.
 - **Display order:** sinks that show a list use `CaptionTimeline`, which orders captions from both sources by start time and reports insert/update/remove positions. Don't append in arrival order.
 - **Utterance ids:** every provisional and committed caption for an utterance shares the utterance's id, so sinks replace text in place. `SegmentRetracted` removes provisional text whose final turned out to be a hallucination.
 - **Several consumers:** UI, session file, and the future LLM are all `ITranscriptSink`s. Never assume the UI is the only consumer.
@@ -119,7 +120,7 @@ These come from spec §6 and §8. Breaking one is a bug even if the tests pass.
 
 ## Configuration
 
-`src/appsettings.json` is linked into both the CLI and the WPF app, so there is one copy of the settings. Sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice, PromptCharacters), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs, plus the `EnergyVad` thresholds: SpeechThresholdDb, SilenceThresholdDb, MinSpeechLevelDb, MinNoiseFloorDb, NoiseFloorRiseDbPerSecond), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs), `Hallucinations` (Blocklist, NearNoiseFloorDb; keep the blocklist's defaults in `appsettings.json`, because configuration binding appends to collections initialised in code). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
+`src/appsettings.json` is linked into both the CLI and the WPF app, so there is one copy of the settings. `%LOCALAPPDATA%\VoiceAssistant\settings.json` (written by the app's settings dialog via `UserSettingsFile`) is layered on top in both hosts. Sections: `Whisper` (ModelPath, Language, UseGpu, GpuDevice, PromptCharacters), `Vad` (FrameMs, MinSpeechMs, PreRollMs, EndSilenceMs, MaxUtteranceSeconds, ProvisionalIntervalMs, plus the `EnergyVad` thresholds: SpeechThresholdDb, SilenceThresholdDb, MinSpeechLevelDb, MinNoiseFloorDb, NoiseFloorRiseDbPerSecond), `Capture` (EnableMic, EnableLoopback, DeviceRole, QueueCapacity, GapToleranceMs, RecoverFromDeviceChanges, ReconnectIntervalMs), `Transcript` (Save, Directory), `Hallucinations` (Blocklist, NearNoiseFloorDb; keep the blocklist's defaults in `appsettings.json`, because configuration binding appends to collections initialised in code). See spec §9 for defaults. Logs go to `%LOCALAPPDATA%\VoiceAssistant\logs\`. Switching `base.en` → `small.en` must stay a one-line config change.
 
 ## Git
 

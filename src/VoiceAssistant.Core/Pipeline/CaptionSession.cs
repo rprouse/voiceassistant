@@ -100,10 +100,9 @@ namespace VoiceAssistant.Core.Pipeline
 
         private async Task PumpAsync(IAudioSourceCapture capture)
         {
-            var converter = new AudioConverter(capture.WaveFormat);
             var builder = new UtteranceBuilder(capture.Source, _vadOptions, _createVad());
 
-            await foreach (var chunk in converter.ConvertAllAsync(capture.ReadAllAsync()).ConfigureAwait(false))
+            await foreach (var chunk in AudioConverter.ConvertAllAsync(capture.ReadAllAsync()).ConfigureAwait(false))
             {
                 foreach (var update in builder.Add(chunk))
                     await Coordinator.SubmitAsync(update).ConfigureAwait(false);

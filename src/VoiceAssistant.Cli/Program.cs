@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
@@ -6,7 +7,9 @@ using Serilog.Events;
 using Spectre.Console.Cli;
 using VoiceAssistant.Cli.Commands;
 using VoiceAssistant.Cli.Infrastructure;
+using VoiceAssistant.Core;
 using VoiceAssistant.Core.Capture;
+using VoiceAssistant.Core.Pipeline;
 using VoiceAssistant.Core.Transcription;
 using VoiceAssistant.Core.Vad;
 
@@ -26,12 +29,15 @@ var builder = Host.CreateApplicationBuilder(new HostApplicationBuilderSettings
     Args = args,
     ContentRootPath = AppContext.BaseDirectory
 });
+// Settings saved from the app's settings dialog override appsettings.json.
+builder.Configuration.AddJsonFile(UserSettingsFile.DefaultPath, optional: true, reloadOnChange: false);
 builder.Logging.ClearProviders();
 builder.Services.AddSerilog(serilog);
 builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
 builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
 builder.Services.Configure<VadOptions>(builder.Configuration.GetSection(VadOptions.SectionName));
 builder.Services.Configure<HallucinationOptions>(builder.Configuration.GetSection(HallucinationOptions.SectionName));
+builder.Services.Configure<TranscriptOptions>(builder.Configuration.GetSection(TranscriptOptions.SectionName));
 
 var app = new CommandApp(new TypeRegistrar(builder.Services));
 app.Configure(config =>

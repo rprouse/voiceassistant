@@ -19,6 +19,12 @@ namespace VoiceAssistant.Core.Capture
         /// <summary>Buffers queued between capture and the next stage before the oldest are dropped.</summary>
         public int QueueCapacity { get; set; } = 500;
 
+        /// <summary>Follow the default device when it changes or the current one disappears.</summary>
+        public bool RecoverFromDeviceChanges { get; set; } = true;
+
+        /// <summary>How often to retry while no device is available.</summary>
+        public int ReconnectIntervalMs { get; set; } = 2000;
+
         /// <summary>Timeline gaps larger than this are filled with silence.</summary>
         public int GapToleranceMs { get; set; } = 50;
     }

@@ -112,6 +112,8 @@
                         Click="OnCloseClick" ToolTip="Close" />
                 <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="—" Margin="0,6,2,6"
                         Click="OnMinimizeClick" ToolTip="Minimise" />
+                <Button DockPanel.Dock="Right" Style="{StaticResource BarButton}" Content="⚙" Margin="0,6,2,6"
+                        Click="OnSettingsClick" IsEnabled="{Binding CanEditSettings}" ToolTip="Settings (when stopped)" />
                 <Slider DockPanel.Dock="Right" Width="80" Minimum="0.3" Maximum="1" Margin="4,0,8,0" VerticalAlignment="Center"
                         Value="{Binding WindowOpacity}" WindowChrome.IsHitTestVisibleInChrome="True" ToolTip="Opacity" />
                 <ToggleButton DockPanel.Dock="Right" Margin="0,6,2,6" IsChecked="{Binding IsAlwaysOnTop}"

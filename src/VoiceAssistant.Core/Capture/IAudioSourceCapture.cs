@@ -9,7 +9,7 @@ namespace VoiceAssistant.Core.Capture
         /// <summary>Friendly name of the device being captured. Available after <see cref="Start"/>.</summary>
         string DeviceName { get; }
 
-        /// <summary>Native device format of every <see cref="CapturedBuffer"/>. Available after <see cref="Start"/>.</summary>
+        /// <summary>The current device's native format. Available after <see cref="Start"/>; may change if the device does.</summary>
         WaveFormat WaveFormat { get; }
 
         /// <summary>Buffers discarded because the reader fell behind.</summary>
@@ -20,6 +20,9 @@ namespace VoiceAssistant.Core.Capture
         /// e.g. Bluetooth packet loss. Counted separately from our own drops.
         /// </summary>
         long DiscontinuityCount { get; }
+
+        /// <summary>Times the capture moved to another device (default device changed, or its device disappeared).</summary>
+        long ReconnectCount { get; }
 
         void Start();
 

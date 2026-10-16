@@ -9,4 +9,4 @@ The following task list is for scaffolding the project as described in [voiceass
 - [x] Stage 4 — VAD and utterance segmentation
 - [x] Stage 5 — WPF captions UI
 - [x] Stage 6 — Both sources together
-- [ ] Stage 7 — Hardening
+- [ ] Stage 7 — Hardening (built; 60-minute unplug/replug test pending)

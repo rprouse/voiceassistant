@@ -87,13 +87,26 @@ namespace VoiceAssistant.Core.Conversion
         /// </remarks>
         public AudioChunk Convert(CapturedBuffer buffer) => new(buffer.Source, Convert(buffer.Data), buffer.Timestamp);
 
-        public async IAsyncEnumerable<AudioChunk> ConvertAllAsync(
+        /// <summary>
+        /// Converts a capture's buffers as they arrive. If the format changes (the capture
+        /// moved to another device), a fresh converter takes over from that buffer on.
+        /// </summary>
+        public static async IAsyncEnumerable<AudioChunk> ConvertAllAsync(
             IAsyncEnumerable<CapturedBuffer> buffers,
             [EnumeratorCancellation] CancellationToken cancellationToken = default)
         {
+            AudioConverter? converter = null;
+            WaveFormat? format = null;
+
             await foreach (var buffer in buffers.WithCancellation(cancellationToken).ConfigureAwait(false))
             {
-                var chunk = Convert(buffer);
+                if (converter is null || !ReferenceEquals(buffer.Format, format) && !buffer.Format.Equals(format))
+                {
+                    converter = new AudioConverter(buffer.Format);
+                    format = buffer.Format;
+                }
+
+                var chunk = converter.Convert(buffer);
                 if (chunk.Samples.Length > 0)
                     yield return chunk;
             }

@@ -4,8 +4,8 @@ using NAudio.CoreAudioApi;
 namespace VoiceAssistant.Core.Capture
 {
     /// <summary>
-    /// Logs changes to the default audio devices. Captures keep using the device
-    /// they started on; restarting them on a change comes later (stage 7).
+    /// Logs changes to the default audio devices. Each capture follows its own role's
+    /// default device (see <see cref="CaptureOptions.RecoverFromDeviceChanges"/>).
     /// </summary>
     public sealed class DefaultDeviceMonitor : IDisposable
     {
@@ -36,7 +36,7 @@ namespace VoiceAssistant.Core.Capture
         private void OnDefaultDeviceChanged(object? sender, DefaultDeviceChangedEventArgs e)
         {
             _logger.LogWarning(
-                "Default {Flow} device for role {Role} changed to {DeviceId}; running captures stay on their original device",
+                "Default {Flow} device for role {Role} changed to {DeviceId}",
                 e.Flow, e.Role, e.DeviceId);
             DefaultDeviceChanged?.Invoke(this, e);
         }

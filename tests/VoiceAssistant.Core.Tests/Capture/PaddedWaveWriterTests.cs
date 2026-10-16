@@ -102,7 +102,7 @@ namespace VoiceAssistant.Core.Tests.Capture
             var samples = new float[(int)(length.TotalSeconds * Format.SampleRate) * Format.Channels];
             Array.Fill(samples, value);
             var bytes = MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();
-            return new CapturedBuffer(AudioSource.Them, bytes, start);
+            return new CapturedBuffer(AudioSource.Them, bytes, start, Format);
         }
     }
 }

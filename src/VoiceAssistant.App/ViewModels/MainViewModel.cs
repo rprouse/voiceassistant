@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +23,7 @@ namespace VoiceAssistant.App.ViewModels
         private readonly WhisperOptions _whisperOptions;
         private readonly VadOptions _vadOptions;
         private readonly HallucinationOptions _hallucinationOptions;
+        private readonly TranscriptOptions _transcriptOptions;
         private readonly ILoggerFactory _loggerFactory;
         private readonly ILogger<MainViewModel> _logger;
         private readonly Dispatcher _dispatcher;
@@ -33,18 +35,21 @@ namespace VoiceAssistant.App.ViewModels
         private SessionClock? _clock;
         private DefaultDeviceMonitor? _deviceMonitor;
         private List<IAudioSourceCapture> _captures = [];
+        private SessionTranscriptSink? _transcript;
 
         public MainViewModel(
             IOptions<CaptureOptions> captureOptions,
             IOptions<WhisperOptions> whisperOptions,
             IOptions<VadOptions> vadOptions,
             IOptions<HallucinationOptions> hallucinationOptions,
+            IOptions<TranscriptOptions> transcriptOptions,
             ILoggerFactory loggerFactory)
         {
             _captureOptions = captureOptions.Value;
             _whisperOptions = whisperOptions.Value;
             _vadOptions = vadOptions.Value;
             _hallucinationOptions = hallucinationOptions.Value;
+            _transcriptOptions = transcriptOptions.Value;
             _loggerFactory = loggerFactory;
             _logger = loggerFactory.CreateLogger<MainViewModel>();
             _dispatcher = Dispatcher.CurrentDispatcher;
@@ -55,11 +60,12 @@ namespace VoiceAssistant.App.ViewModels
         public ObservableCollection<CaptionViewModel> Captions { get; } = [];
 
         [ObservableProperty]
-        [NotifyPropertyChangedFor(nameof(ToggleText))]
+        [NotifyPropertyChangedFor(nameof(ToggleText), nameof(CanEditSettings))]
         public partial bool IsRunning { get; set; }
 
         [ObservableProperty]
         [NotifyCanExecuteChangedFor(nameof(ToggleCommand))]
+        [NotifyPropertyChangedFor(nameof(CanEditSettings))]
         public partial bool IsBusy { get; set; }
 
         [ObservableProperty]
@@ -76,6 +82,39 @@ namespace VoiceAssistant.App.ViewModels
 
         public string ToggleText => IsRunning ? "Stop" : "Start";
 
+        /// <summary>Settings can only change between sessions.</summary>
+        public bool CanEditSettings => !IsRunning && !IsBusy;
+
+        public SettingsViewModel CreateSettings() => new(_whisperOptions, _vadOptions);
+
+        /// <summary>
+        /// Saves the dialog's settings and applies them: VAD settings to the next session,
+        /// model and language by reloading the model now.
+        /// </summary>
+        public async Task ApplySettingsAsync(SettingsViewModel settings)
+        {
+            var reload = settings.ModelPath != _whisperOptions.ModelPath
+                || settings.Language != _whisperOptions.Language
+                || settings.GpuDevice != _whisperOptions.GpuDevice;
+            var gpuToggled = settings.UseGpu != _whisperOptions.UseGpu;
+
+            settings.ApplyTo(_whisperOptions, _vadOptions);
+            UserSettingsFile.Save(UserSettingsFile.DefaultPath, _whisperOptions, _vadOptions);
+            _logger.LogInformation("Settings saved to {Path}", UserSettingsFile.DefaultPath);
+
+            if (reload)
+            {
+                _transcriber?.Dispose();
+                _transcriber = null;
+                ToggleCommand.NotifyCanExecuteChanged();
+                Status = "Loading model…";
+                await InitializeAsync();
+            }
+
+            if (gpuToggled)
+                Status = "Saved. Restart the app to switch the GPU on or off.";
+        }
+
         /// <summary>Loads the model in the background, so the window appears straight away.</summary>
         public async Task InitializeAsync()
         {
@@ -84,6 +123,7 @@ namespace VoiceAssistant.App.ViewModels
             {
                 _transcriber = await Task.Run(() => new WhisperTranscriber(_whisperOptions, _loggerFactory.CreateLogger<WhisperTranscriber>()));
                 Status = $"Ready · {_transcriber.Description}";
+                ToggleCommand.NotifyCanExecuteChanged();
             }
             catch (Exception ex)
             {
@@ -164,8 +204,13 @@ namespace VoiceAssistant.App.ViewModels
                 if (_captureOptions.EnableMic)
                     _captures.Add(new MicCapture(_clock, _captureOptions, _loggerFactory.CreateLogger<MicCapture>()));
 
+                List<ITranscriptSink> sinks = [this];
+                _transcript = _transcriptOptions.Save ? new SessionTranscriptSink(_transcriptOptions.ResolvedDirectory, DateTimeOffset.Now) : null;
+                if (_transcript is not null)
+                    sinks.Add(_transcript);
+
                 var session = new CaptionSession(
-                    _captures, _transcriber, _vadOptions, _hallucinationOptions, _whisperOptions.PromptCharacters, [this], _loggerFactory);
+                    _captures, _transcriber, _vadOptions, _hallucinationOptions, _whisperOptions.PromptCharacters, sinks, _loggerFactory);
 
                 // Opening audio devices can block; keep it off the UI thread.
                 await Task.Run(session.Start);
@@ -219,7 +264,12 @@ namespace VoiceAssistant.App.ViewModels
             {
                 parts.Add($"dropped {_captures.Sum(c => c.DroppedBufferCount)}");
                 parts.Add($"device glitches {_captures.Sum(c => c.DiscontinuityCount)}");
+                if (_captures.Sum(c => c.ReconnectCount) is > 0 and var switches)
+                    parts.Add($"device switches {switches}");
             }
+
+            if (!IsRunning && _transcript is { HasContent: true })
+                parts.Add($"saved {Path.GetFileName(_transcript.FilePath)}");
 
             Status = string.Join(" · ", parts);
         }

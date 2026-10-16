@@ -206,8 +206,20 @@ namespace VoiceAssistant.Cli.Commands
             private async Task PumpAsync(PaddedWaveWriter native, AudioConverter? converter, PaddedWaveWriter? converted)
             {
                 var conversionTime = TimeSpan.Zero;
+                var format = Capture.WaveFormat;
+                var warned = false;
                 await foreach (var buffer in Capture.ReadAllAsync())
                 {
+                    // A WAV file has one format. If the capture moved to a device with another,
+                    // skip its audio; the gap is filled with silence so the timeline still holds.
+                    if (!buffer.Format.Equals(format))
+                    {
+                        if (!warned)
+                            _logger.LogWarning("{Source} switched to a device with a different format ({Format}); its audio is not recorded", Capture.Source, buffer.Format);
+                        warned = true;
+                        continue;
+                    }
+
                     native.Write(buffer);
 
                     if (converter is not null && converted is not null)

@@ -55,6 +55,14 @@ namespace VoiceAssistant.App
                 _scrollViewer.ScrollToEnd();
         }
 
+        private async void OnSettingsClick(object sender, RoutedEventArgs e)
+        {
+            var settings = _viewModel.CreateSettings();
+            var dialog = new SettingsWindow(settings) { Owner = this, Topmost = Topmost };
+            if (dialog.ShowDialog() == true)
+                await _viewModel.ApplySettingsAsync(settings);
+        }
+
         private void OnMinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
 
         private void OnCloseClick(object sender, RoutedEventArgs e) => Close();

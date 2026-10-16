@@ -21,6 +21,7 @@ namespace VoiceAssistant.Cli.Commands
         private readonly WhisperOptions _whisperOptions;
         private readonly VadOptions _vadOptions;
         private readonly HallucinationOptions _hallucinationOptions;
+        private readonly TranscriptOptions _transcriptOptions;
         private readonly ILoggerFactory _loggerFactory;
 
         public LiveCommand(
@@ -28,12 +29,14 @@ namespace VoiceAssistant.Cli.Commands
             IOptions<WhisperOptions> whisperOptions,
             IOptions<VadOptions> vadOptions,
             IOptions<HallucinationOptions> hallucinationOptions,
+            IOptions<TranscriptOptions> transcriptOptions,
             ILoggerFactory loggerFactory)
         {
             _captureOptions = captureOptions.Value;
             _whisperOptions = whisperOptions.Value;
             _vadOptions = vadOptions.Value;
             _hallucinationOptions = hallucinationOptions.Value;
+            _transcriptOptions = transcriptOptions.Value;
             _loggerFactory = loggerFactory;
         }
 
@@ -92,7 +95,7 @@ namespace VoiceAssistant.Cli.Commands
                 foreach (var capture in captures)
                 {
                     AnsiConsole.MarkupLineInterpolated(
-                        $"[grey]{capture.Source}: {capture.DroppedBufferCount} dropped buffers, {capture.DiscontinuityCount} device glitches[/]");
+                        $"[grey]{capture.Source}: {capture.DroppedBufferCount} dropped buffers, {capture.DiscontinuityCount} device glitches, {capture.ReconnectCount} device switches[/]");
                 }
 
                 return 0;
@@ -106,13 +109,18 @@ namespace VoiceAssistant.Cli.Commands
 
         private async Task RunCaptionsAsync(List<IAudioSourceCapture> captures, ITranscriber transcriber, Settings settings, CancellationToken cancellationToken)
         {
+            List<ITranscriptSink> sinks = [new ConsoleTranscriptSink()];
+            var transcript = _transcriptOptions.Save ? new SessionTranscriptSink(_transcriptOptions.ResolvedDirectory, DateTimeOffset.Now) : null;
+            if (transcript is not null)
+                sinks.Add(transcript);
+
             var session = new CaptionSession(
                 captures,
                 transcriber,
                 _vadOptions,
                 _hallucinationOptions,
                 _whisperOptions.PromptCharacters,
-                [new ConsoleTranscriptSink()],
+                sinks,
                 _loggerFactory);
 
             session.Start();
@@ -125,6 +133,8 @@ namespace VoiceAssistant.Cli.Commands
 
             AnsiConsole.MarkupLineInterpolated(
                 $"[grey]Provisional passes skipped while busy: {session.Coordinator.SkippedProvisionalCount}. Hallucinations dropped: {session.Coordinator.HallucinationCount}.[/]");
+            if (transcript is { HasContent: true })
+                AnsiConsole.MarkupLineInterpolated($"Transcript saved to [bold]{transcript.FilePath}[/]");
         }
 
         private static async Task RunNaiveAsync(List<IAudioSourceCapture> captures, ITranscriber transcriber, Settings settings, CancellationToken cancellationToken)
@@ -173,10 +183,9 @@ namespace VoiceAssistant.Cli.Commands
 
         private static async Task PumpNaiveAsync(IAudioSourceCapture capture, TimeSpan chunkLength, ChannelWriter<AudioChunk> windows)
         {
-            var converter = new AudioConverter(capture.WaveFormat);
             var chunker = new FixedChunker(chunkLength);
 
-            await foreach (var chunk in converter.ConvertAllAsync(capture.ReadAllAsync()))
+            await foreach (var chunk in AudioConverter.ConvertAllAsync(capture.ReadAllAsync()))
             {
                 foreach (var window in chunker.Add(chunk))
                     await windows.WriteAsync(window);

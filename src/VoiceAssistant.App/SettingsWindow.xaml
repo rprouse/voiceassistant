@@ -1,0 +1,97 @@
+<Window x:Class="VoiceAssistant.App.SettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:vm="clr-namespace:VoiceAssistant.App.ViewModels"
+        mc:Ignorable="d"
+        d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
+        Title="Settings" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
+    <Window.Resources>
+        <Style TargetType="TextBlock" x:Key="Label">
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,4,12,4" />
+        </Style>
+        <Style TargetType="TextBlock" x:Key="Heading">
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Margin" Value="0,12,0,4" />
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Margin" Value="0,3" />
+            <Setter Property="Padding" Value="3,2" />
+        </Style>
+    </Window.Resources>
+
+    <StackPanel Margin="16">
+        <TextBlock Style="{StaticResource Heading}" Text="Transcription" Margin="0,0,0,4" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Style="{StaticResource Label}" Text="Model" />
+            <ComboBox Grid.Column="1" Margin="0,3" IsEditable="True" ItemsSource="{Binding Models}" Text="{Binding ModelPath, UpdateSourceTrigger=PropertyChanged}"
+                      ToolTip="A ggml model file. Download more with: VoiceAssistant model get small.en" />
+            <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Language" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Language, UpdateSourceTrigger=PropertyChanged}" ToolTip="Language code, e.g. en. English-only (.en) models need en." />
+            <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Use GPU" />
+            <CheckBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding UseGpu}"
+                      Content="Vulkan (switching on or off needs an app restart)" />
+            <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="GPU device" />
+            <TextBox Grid.Row="3" Grid.Column="1" Width="60" HorizontalAlignment="Left" Text="{Binding GpuDevice, UpdateSourceTrigger=PropertyChanged}"
+                     ToolTip="Vulkan device number; the log lists them as 'ggml_vulkan: N = ...'" />
+        </Grid>
+
+        <TextBlock Style="{StaticResource Heading}" Text="Voice detection" />
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="80" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+            <Grid.RowDefinitions>
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+            </Grid.RowDefinitions>
+            <TextBlock Grid.Row="0" Style="{StaticResource Label}" Text="Speech to start (ms)" />
+            <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding MinSpeechMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Pre-roll (ms)" />
+            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding PreRollMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Silence to end (ms)" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding EndSilenceMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="2" Grid.Column="2" Style="{StaticResource Label}" Margin="8,0,0,0" Foreground="Gray" Text="raise if sentences split" />
+            <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="Max utterance (s)" />
+            <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding MaxUtteranceSeconds, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="4" Style="{StaticResource Label}" Text="Provisional every (ms)" />
+            <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding ProvisionalIntervalMs, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="5" Style="{StaticResource Label}" Text="Start threshold (dB)" />
+            <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding SpeechThresholdDb, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="5" Grid.Column="2" Style="{StaticResource Label}" Margin="8,0,0,0" Foreground="Gray" Text="lower catches quieter speech" />
+            <TextBlock Grid.Row="6" Style="{StaticResource Label}" Text="Stay threshold (dB)" />
+            <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding SilenceThresholdDb, UpdateSourceTrigger=PropertyChanged}" />
+            <TextBlock Grid.Row="7" Style="{StaticResource Label}" Text="Minimum level (dBFS)" />
+            <TextBox Grid.Row="7" Grid.Column="1" Text="{Binding MinSpeechLevelDb, UpdateSourceTrigger=PropertyChanged}" />
+        </Grid>
+
+        <TextBlock Text="{Binding Error}" Foreground="Firebrick" TextWrapping="Wrap" Margin="0,10,0,0">
+            <TextBlock.Style>
+                <Style TargetType="TextBlock">
+                    <Style.Triggers>
+                        <DataTrigger Binding="{Binding Error}" Value="{x:Null}">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                        </DataTrigger>
+                    </Style.Triggers>
+                </Style>
+            </TextBlock.Style>
+        </TextBlock>
+
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+            <Button Content="Save" IsDefault="True" MinWidth="80" Margin="0,0,8,0" Click="OnSaveClick" />
+            <Button Content="Cancel" IsCancel="True" MinWidth="80" />
+        </StackPanel>
+    </StackPanel>
+</Window>

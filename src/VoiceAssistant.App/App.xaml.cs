@@ -1,13 +1,16 @@
 ﻿using System.IO;
 using System.Windows;
 using System.Windows.Threading;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 using VoiceAssistant.App.ViewModels;
+using VoiceAssistant.Core;
 using VoiceAssistant.Core.Capture;
+using VoiceAssistant.Core.Pipeline;
 using VoiceAssistant.Core.Transcription;
 using VoiceAssistant.Core.Vad;
 
@@ -35,12 +38,15 @@ namespace VoiceAssistant.App
                 Args = e.Args,
                 ContentRootPath = AppContext.BaseDirectory
             });
+            // Settings saved from the settings dialog override appsettings.json.
+            builder.Configuration.AddJsonFile(UserSettingsFile.DefaultPath, optional: true, reloadOnChange: false);
             builder.Logging.ClearProviders();
             builder.Services.AddSerilog(serilog, dispose: true);
             builder.Services.Configure<CaptureOptions>(builder.Configuration.GetSection(CaptureOptions.SectionName));
             builder.Services.Configure<WhisperOptions>(builder.Configuration.GetSection(WhisperOptions.SectionName));
             builder.Services.Configure<VadOptions>(builder.Configuration.GetSection(VadOptions.SectionName));
             builder.Services.Configure<HallucinationOptions>(builder.Configuration.GetSection(HallucinationOptions.SectionName));
+            builder.Services.Configure<TranscriptOptions>(builder.Configuration.GetSection(TranscriptOptions.SectionName));
             builder.Services.AddSingleton<MainViewModel>();
             builder.Services.AddSingleton<MainWindow>();
 

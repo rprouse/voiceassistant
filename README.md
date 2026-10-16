@@ -16,7 +16,8 @@ The goal is fast, private, readable captions for meetings, with no audio leaving
 - **Provisional** captions (grey, updating in place) that become **committed** captions once the utterance ends.
 - Rows labelled "Me" and "Them", in timestamp order.
 - WPF captions window with always-on-top and adjustable opacity, so it can sit over a meeting.
-- Each session's transcript saved as Markdown under `%LOCALAPPDATA%\VoiceAssistant\sessions\`.
+- Each session's committed transcript saved as Markdown to `%LOCALAPPDATA%\VoiceAssistant\sessions\yyyy-MM-dd_HHmm.md`, kept complete after every caption.
+- Survives device changes: if the default device changes or a headset is unplugged, capture moves to the new default device and captioning carries on.
 
 **Not in scope for the PoC:** LLM integration, cloud services, speaker diarization beyond Me/Them, an installer, or auto-update.
 
@@ -70,7 +71,7 @@ The model loads in the background when the window opens; press **Start** once th
 
 ## Configuration
 
-Settings live in `src/appsettings.json`, shared by the CLI and the desktop app:
+Settings live in `src/appsettings.json`, shared by the CLI and the desktop app. The desktop app's ⚙ **Settings** dialog (available while stopped) edits the model, language, GPU and voice-detection settings and saves them to `%LOCALAPPDATA%\VoiceAssistant\settings.json`, which overrides `appsettings.json` for both the app and the CLI and survives rebuilds.
 
 ```json
 {
@@ -80,8 +81,10 @@ Settings live in `src/appsettings.json`, shared by the CLI and the desktop app:
                 "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000,
                 "SpeechThresholdDb": 10, "SilenceThresholdDb": 5, "MinSpeechLevelDb": -50,
                 "MinNoiseFloorDb": -75, "NoiseFloorRiseDbPerSecond": 2 },
+  "Transcript": { "Save": true, "Directory": "" },
   "Capture":  { "EnableMic": true, "EnableLoopback": true, "DeviceRole": "Communications",
-                "QueueCapacity": 500, "GapToleranceMs": 50 },
+                "QueueCapacity": 500, "GapToleranceMs": 50,
+                "RecoverFromDeviceChanges": true, "ReconnectIntervalMs": 2000 },
   "Hallucinations": { "Blocklist": [ "Thank you.", "Thanks for watching!", "Thank you for watching." ],
                       "NearNoiseFloorDb": 6 }
 }
