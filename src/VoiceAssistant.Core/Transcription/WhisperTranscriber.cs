@@ -16,7 +16,7 @@ namespace VoiceAssistant.Core.Transcription
     {
         private readonly WhisperOptions _options;
         private readonly ILogger<WhisperTranscriber> _logger;
-        private readonly WhisperFactory _factory;
+        private WhisperFactory _factory;
         private readonly WhisperProcessor _processor;
         private readonly SemaphoreSlim _gate = new(1, 1);
         private readonly IDisposable _nativeLog;
@@ -36,22 +36,38 @@ namespace VoiceAssistant.Core.Transcription
 
             ModelName = Path.GetFileName(modelPath);
 
-            // whisper.cpp's own messages (devices found, buffers allocated) go to our log.
+            // whisper.cpp's own messages (devices found, buffers allocated) go to our log,
+            // and its GPU list is how we learn the devices' names and numbers.
             _nativeLog = LogProvider.AddLogger((level, message) =>
+            {
+                VulkanDevices.Observe(message);
                 _logger.Log(level is WhisperLogLevel.Error ? LogLevel.Error : level is WhisperLogLevel.Warning ? LogLevel.Warning : LogLevel.Debug,
-                    "whisper.cpp: {Message}", message?.TrimEnd()));
+                    "whisper.cpp: {Message}", message?.TrimEnd());
+            });
 
             // Must be set before the first model load in the process. Without a GPU, load only
             // the CPU runtime so the log reports what is really doing the work.
             RuntimeOptions.RuntimeLibraryOrder = options.UseGpu
                 ? [RuntimeLibrary.Vulkan, RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx]
                 : [RuntimeLibrary.Cpu, RuntimeLibrary.CpuNoAvx];
-            _factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = options.UseGpu, GpuDevice = options.GpuDevice });
+            var gpuDevice = options.GpuDevice >= 0 ? options.GpuDevice : 0;
+            _factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = options.UseGpu, GpuDevice = gpuDevice });
+
+            // Auto: the device list only appears in the log once a model has loaded. If that
+            // picked an integrated GPU but a dedicated one exists, load again on the dedicated one.
+            if (options.UseGpu && options.GpuDevice < 0 && VulkanDevices.Preferred is { } preferred && preferred.Index != gpuDevice)
+            {
+                _logger.LogInformation("Auto GPU: switching from device {From} to {To}", gpuDevice, preferred.DisplayName);
+                _factory.Dispose();
+                gpuDevice = preferred.Index;
+                _factory = WhisperFactory.FromPath(modelPath, new WhisperFactoryOptions { UseGpu = true, GpuDevice = gpuDevice });
+            }
 
             // Reused for every call without a prompt; prompts need a processor of their own.
             _processor = CreateProcessor(prompt: null);
 
             Runtime = RuntimeOptions.LoadedLibrary?.ToString() ?? "unknown";
+            Gpu = RuntimeOptions.LoadedLibrary is RuntimeLibrary.Vulkan ? VulkanDevices.Get(gpuDevice) : null;
             _logger.LogInformation("Loaded Whisper model {Model} ({Language}) on the {Runtime} runtime", modelPath, options.Language, Runtime);
             if (options.UseGpu && RuntimeOptions.LoadedLibrary is not RuntimeLibrary.Vulkan)
                 _logger.LogWarning("UseGpu is on but the Vulkan runtime did not load; transcribing on {Runtime}", Runtime);
@@ -59,7 +75,10 @@ namespace VoiceAssistant.Core.Transcription
 
         public string ModelName { get; }
 
-        public string Description => $"{ModelName} on {Runtime}";
+        public string Description => Gpu is null ? $"{ModelName} on {Runtime}" : $"{ModelName} on {Gpu.Name}";
+
+        /// <summary>The GPU doing the work, if transcription runs on one.</summary>
+        public VulkanDevice? Gpu { get; }
 
         /// <summary>The native whisper.cpp runtime Whisper.net actually loaded, e.g. Cpu or Cuda.</summary>
         public string Runtime { get; }

@@ -16,10 +16,12 @@ namespace VoiceAssistant.Core.Transcription
         public bool UseGpu { get; set; }
 
         /// <summary>
-        /// Vulkan device index. Laptops often list the integrated GPU first; the log
-        /// lists every device ("ggml_vulkan: N = ...") when the model loads.
+        /// Vulkan device number, or -1 for Auto: the first dedicated GPU, else the first
+        /// GPU. Laptops often list the integrated GPU first, so Auto avoids it.
         /// </summary>
-        public int GpuDevice { get; set; }
+        public int GpuDevice { get; set; } = AutoGpuDevice;
+
+        public const int AutoGpuDevice = -1;
 
         /// <summary>How much of the source's committed text is passed to Whisper as a prompt, for continuity.</summary>
         public int PromptCharacters { get; set; } = 200;

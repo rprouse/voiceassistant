@@ -93,7 +93,7 @@ namespace VoiceAssistant.App.ViewModels
         /// </summary>
         public async Task ApplySettingsAsync(SettingsViewModel settings)
         {
-            var reload = settings.ModelPath != _whisperOptions.ModelPath
+            var reload = settings.SelectedModel.RelativePath != _whisperOptions.ModelPath.Replace('\\', '/')
                 || settings.Language != _whisperOptions.Language
                 || settings.GpuDevice != _whisperOptions.GpuDevice;
             var gpuToggled = settings.UseGpu != _whisperOptions.UseGpu;

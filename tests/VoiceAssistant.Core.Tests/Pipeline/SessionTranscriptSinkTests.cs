@@ -14,6 +14,13 @@ namespace VoiceAssistant.Core.Tests.Pipeline
         public void DeleteDirectory() => Directory.Delete(_directory, recursive: true);
 
         [Test]
+        public void TranscriptsGoToDocumentsByDefault()
+        {
+            new TranscriptOptions().ResolvedDirectory.ShouldBe(
+                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "VoiceAssistant"));
+        }
+
+        [Test]
         public void FileIsNamedBySessionStart()
         {
             var sink = new SessionTranscriptSink(_directory, StartedAt);

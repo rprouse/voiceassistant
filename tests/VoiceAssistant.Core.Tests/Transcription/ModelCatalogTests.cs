@@ -21,6 +21,13 @@ namespace VoiceAssistant.Core.Tests.Transcription
         }
 
         [Test]
+        public void EveryDownloadableModelIsDescribed()
+        {
+            ModelCatalog.Models.Select(m => m.Name).ShouldBe(ModelCatalog.Names, ignoreOrder: true);
+            ModelCatalog.Models.ShouldAllBe(m => m.ApproximateSizeMb > 0 && m.Note.Length > 0);
+        }
+
+        [Test]
         public void DefaultConfiguredModelIsDownloadable()
         {
             var fileName = Path.GetFileName(new WhisperOptions().ModelPath);

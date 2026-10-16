@@ -6,7 +6,7 @@
         xmlns:vm="clr-namespace:VoiceAssistant.App.ViewModels"
         mc:Ignorable="d"
         d:DataContext="{d:DesignInstance Type=vm:SettingsViewModel}"
-        Title="Settings" Width="460" SizeToContent="Height" ResizeMode="NoResize"
+        Title="Settings" Width="500" SizeToContent="Height" ResizeMode="NoResize"
         WindowStartupLocation="CenterOwner" ShowInTaskbar="False">
     <Window.Resources>
         <Style TargetType="TextBlock" x:Key="Label">
@@ -31,19 +31,84 @@
                 <ColumnDefinition Width="*" />
             </Grid.ColumnDefinitions>
             <Grid.RowDefinitions>
-                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
+                <RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition /><RowDefinition />
             </Grid.RowDefinitions>
+
             <TextBlock Style="{StaticResource Label}" Text="Model" />
-            <ComboBox Grid.Column="1" Margin="0,3" IsEditable="True" ItemsSource="{Binding Models}" Text="{Binding ModelPath, UpdateSourceTrigger=PropertyChanged}"
-                      ToolTip="A ggml model file. Download more with: VoiceAssistant model get small.en" />
-            <TextBlock Grid.Row="1" Style="{StaticResource Label}" Text="Language" />
-            <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Language, UpdateSourceTrigger=PropertyChanged}" ToolTip="Language code, e.g. en. English-only (.en) models need en." />
-            <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Use GPU" />
-            <CheckBox Grid.Row="2" Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding UseGpu}"
+            <ComboBox Grid.Column="1" Margin="0,3" ItemsSource="{Binding Models}" SelectedItem="{Binding SelectedModel}"
+                      IsEnabled="{Binding IsNotDownloading}">
+                <ComboBox.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ModelChoice}">
+                        <Grid Width="300">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="60" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" />
+                            <TextBlock Grid.Column="1" Text="{Binding Size}" Foreground="Gray" />
+                            <TextBlock Grid.Column="2" Text="{Binding Status}" Foreground="Gray" />
+                        </Grid>
+                    </DataTemplate>
+                </ComboBox.ItemTemplate>
+            </ComboBox>
+
+            <!-- Selected model's note, and downloading it if needed. -->
+            <StackPanel Grid.Row="1" Grid.Column="1" Margin="0,2,0,4">
+                <TextBlock Text="{Binding SelectedModel.Note}" Foreground="Gray" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                    <Button Content="Download" MinWidth="80" Command="{Binding DownloadCommand}" Margin="0,0,8,0" />
+                    <Button Content="Cancel download" MinWidth="80" Command="{Binding DownloadCancelCommand}">
+                        <Button.Style>
+                            <Style TargetType="Button">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsDownloading}" Value="True">
+                                        <Setter Property="Visibility" Value="Visible" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Button.Style>
+                    </Button>
+                </StackPanel>
+                <ProgressBar Height="6" Margin="0,6,0,0" Maximum="100" Value="{Binding DownloadPercent}">
+                    <ProgressBar.Style>
+                        <Style TargetType="ProgressBar">
+                            <Setter Property="Visibility" Value="Collapsed" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsDownloading}" Value="True">
+                                    <Setter Property="Visibility" Value="Visible" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ProgressBar.Style>
+                </ProgressBar>
+                <TextBlock Text="{Binding DownloadStatus}" Foreground="Gray" Margin="0,2,0,0" />
+            </StackPanel>
+
+            <TextBlock Grid.Row="2" Style="{StaticResource Label}" Text="Language" />
+            <TextBox Grid.Row="2" Grid.Column="1" Text="{Binding Language, UpdateSourceTrigger=PropertyChanged}" ToolTip="Language code, e.g. en. English-only (.en) models need en." />
+
+            <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="Use GPU" />
+            <CheckBox Grid.Row="3" Grid.Column="1" VerticalAlignment="Center" IsChecked="{Binding UseGpu}"
                       Content="Vulkan (switching on or off needs an app restart)" />
-            <TextBlock Grid.Row="3" Style="{StaticResource Label}" Text="GPU device" />
-            <TextBox Grid.Row="3" Grid.Column="1" Width="60" HorizontalAlignment="Left" Text="{Binding GpuDevice, UpdateSourceTrigger=PropertyChanged}"
-                     ToolTip="Vulkan device number; the log lists them as 'ggml_vulkan: N = ...'" />
+
+            <TextBlock Grid.Row="4" Style="{StaticResource Label}" Text="GPU" />
+            <StackPanel Grid.Row="4" Grid.Column="1">
+                <ComboBox Margin="0,3" ItemsSource="{Binding Gpus}" DisplayMemberPath="Name" SelectedValuePath="Index"
+                          SelectedValue="{Binding GpuDevice}" IsEnabled="{Binding UseGpu}" />
+                <TextBlock Text="GPU names appear once the app has run with the GPU on." Foreground="Gray" TextWrapping="Wrap">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding GpuNamesKnown}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+            </StackPanel>
         </Grid>
 
         <TextBlock Style="{StaticResource Heading}" Text="Voice detection" />
@@ -90,7 +155,7 @@
         </TextBlock>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
-            <Button Content="Save" IsDefault="True" MinWidth="80" Margin="0,0,8,0" Click="OnSaveClick" />
+            <Button Content="Save" IsDefault="True" MinWidth="80" Margin="0,0,8,0" Click="OnSaveClick" IsEnabled="{Binding IsNotDownloading}" />
             <Button Content="Cancel" IsCancel="True" MinWidth="80" />
         </StackPanel>
     </StackPanel>

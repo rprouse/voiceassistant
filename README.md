@@ -16,7 +16,7 @@ The goal is fast, private, readable captions for meetings, with no audio leaving
 - **Provisional** captions (grey, updating in place) that become **committed** captions once the utterance ends.
 - Rows labelled "Me" and "Them", in timestamp order.
 - WPF captions window with always-on-top and adjustable opacity, so it can sit over a meeting.
-- Each session's committed transcript saved as Markdown to `%LOCALAPPDATA%\VoiceAssistant\sessions\yyyy-MM-dd_HHmm.md`, kept complete after every caption.
+- Each session's committed transcript saved as Markdown in `Documents\VoiceAssistant` (one `yyyy-MM-dd_HHmm.md` file per session), kept complete after every caption.
 - Survives device changes: if the default device changes or a headset is unplugged, capture moves to the new default device and captioning carries on.
 
 **Not in scope for the PoC:** LLM integration, cloud services, speaker diarization beyond Me/Them, an installer, or auto-update.
@@ -37,7 +37,9 @@ dotnet build
 dotnet test
 ```
 
-### Get a model *(stage 3)*
+### Get a model
+
+In the desktop app, open ⚙ **Settings**, choose a model (sizes and notes are shown; ✓ marks the ones you have) and press **Download**. Or use the CLI:
 
 ```powershell
 dotnet run --project src/VoiceAssistant.Cli -- model get base.en
@@ -75,7 +77,7 @@ Settings live in `src/appsettings.json`, shared by the CLI and the desktop app. 
 
 ```json
 {
-  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": true, "GpuDevice": 1,
+  "Whisper":  { "ModelPath": "models/ggml-base.en.bin", "Language": "en", "UseGpu": true, "GpuDevice": -1,
                 "PromptCharacters": 200 },
   "Vad":      { "FrameMs": 30, "MinSpeechMs": 200, "PreRollMs": 300, "EndSilenceMs": 600,
                 "MaxUtteranceSeconds": 15, "ProvisionalIntervalMs": 1000,
@@ -92,7 +94,7 @@ Settings live in `src/appsettings.json`, shared by the CLI and the desktop app. 
 
 Tuning tips:
 
-- **GPU:** `UseGpu` transcribes through Whisper.net's Vulkan runtime (any recent GPU driver, no CUDA install needed), falling back to the CPU if Vulkan can't load. `GpuDevice` picks the Vulkan device: laptops often list the integrated GPU as device 0, so check the log for the `ggml_vulkan: N = ...` lines when the model loads. The first GPU run after a driver update takes several extra seconds while shaders compile.
+- **GPU:** `UseGpu` transcribes through Whisper.net's Vulkan runtime (any recent GPU driver, no CUDA install needed), falling back to the CPU if Vulkan can't load. `GpuDevice` is `-1` (Auto) by default, which picks a dedicated GPU over an integrated one; laptops often list the integrated GPU first. Settings lists the GPUs by name once the app has run with the GPU on. The first GPU run after a driver update takes several extra seconds while shaders compile.
 - **Captions lag behind speech:** check the real-time factor in the log or status line. If it's above ~0.5, raise `ProvisionalIntervalMs`, set `UseGpu`, or use a smaller model.
 - **Sentences split too early:** raise `EndSilenceMs`.
 - **First words clipped:** raise `PreRollMs`.

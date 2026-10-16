@@ -51,7 +51,7 @@ namespace VoiceAssistant.Cli.Commands
 
             using var transcriber = AnsiConsole.Status().Start("Loading model...", _ =>
                 new WhisperTranscriber(_options, _loggerFactory.CreateLogger<WhisperTranscriber>()));
-            AnsiConsole.MarkupLineInterpolated($"[grey]{transcriber.ModelName} on {transcriber.Runtime}, {audio.TotalSeconds:F1} s of audio[/]");
+            AnsiConsole.MarkupLineInterpolated($"[grey]{transcriber.Description}, {audio.TotalSeconds:F1} s of audio[/]");
 
             var started = Stopwatch.GetTimestamp();
             await foreach (var segment in transcriber.TranscribeAsync(settings.Source, TimeSpan.Zero, samples, prompt: null, cancellationToken))

@@ -193,7 +193,7 @@ Handle crosstalk sensibly: if both sources have utterances ready, process in ord
 ### Stage 7 — Hardening
 
 - GPU runtime opt-in via config; log which runtime Whisper.net actually loaded.
-- Save each session's committed transcript to `%LOCALAPPDATA%\VoiceAssistant\sessions\yyyy-MM-dd_HHmm.md` (implemented as another `ITranscriptSink`).
+- Save each session's committed transcript to `Documents\VoiceAssistant\yyyy-MM-dd_HHmm.md` (the user's Documents folder, which is easier to find than AppData) (implemented as another `ITranscriptSink`).
 - Recover from default-device changes by restarting the affected capture.
 - Settings dialog for model, language, and the VAD thresholds from stage 4.
 - Clean shutdown: Stop flushes the in-progress utterance as a final commit.

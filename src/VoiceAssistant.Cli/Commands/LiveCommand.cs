@@ -85,7 +85,7 @@ namespace VoiceAssistant.Cli.Commands
             try
             {
                 var mode = settings.Naive ? $"{settings.ChunkSeconds} s chunks" : "utterances";
-                AnsiConsole.MarkupLineInterpolated($"[grey]{transcriber.ModelName} on {transcriber.Runtime}, {mode}. Ctrl+C to stop.[/]");
+                AnsiConsole.MarkupLineInterpolated($"[grey]{transcriber.Description}, {mode}. Ctrl+C to stop.[/]");
 
                 if (settings.Naive)
                     await RunNaiveAsync(captures, transcriber, settings, cancellationToken);
